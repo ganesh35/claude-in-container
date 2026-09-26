@@ -1,0 +1,8 @@
+# Secrets and local config
+.env
+# Default local mount folders (Claude login lives in home/)
+home/
+workspace/
+.DS_Store
+# Local Claude instructions stay out of the repo
+CLAUDE.md
