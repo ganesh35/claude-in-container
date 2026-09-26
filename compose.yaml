@@ -10,14 +10,13 @@ services:
     hostname: ${CONTAINER_NAME:-claude-in-container}
     restart: unless-stopped
     user: ${PUID:-1000}:${PGID:-1000}
-    environment: [REMOTE_CONTROL_NAME, ANTHROPIC_API_KEY]
+    # Same names as CONTAINER_ENV in scripts/lib.sh; unset ones are not passed
+    environment:
+      [REMOTE_CONTROL_NAME, ANTHROPIC_API_KEY, CONTINUE, GH_VERSION, YQ_VERSION, JQ_VERSION,
+       TERRAFORM_VERSION, AWSCLI_VERSION, NPM_TOOLS, UV_TOOLS]
     volumes:
-      # Fail fast on missing folders: Docker would create them root-owned, unwritable for Claude
+      # The single mount; fail fast if missing, since Docker would create it root-owned and unwritable for Claude
       - type: bind
-        source: ${WORKSPACE_DIR:-./workspace}
-        target: /workspace
-        bind: { create_host_path: false }
-      - type: bind
-        source: ${CLAUDE_HOME_DIR:-./home}
-        target: /home/node
+        source: ${DATA_DIR:-./data}
+        target: /data
         bind: { create_host_path: false }

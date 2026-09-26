@@ -10,11 +10,13 @@
   <Privileged>false</Privileged>
   <Support>https://github.com/ganesh35/claude-in-container/issues</Support>
   <Project>https://github.com/ganesh35/claude-in-container</Project>
-  <Overview>Always-on Claude Code in tmux, reachable from phone or browser via Remote Control. Claude sees only the Workspace folder.&#xD;
+  <Overview>Always-on Claude Code in tmux, reachable from phone or browser via Remote Control. Claude sees only the Data folder, which holds your projects and, in .home, its login, settings and runtime-installed tools.&#xD;
 &#xD;
-Before installing: clone the repo and run CONTAINER_ENGINE="sudo docker" scripts/build.sh. Create the Workspace and Home folders owned by the user in Extra Parameters (default --user 99:100), e.g. mkdir -p DIR &amp;&amp; chown 99:100 DIR; Docker would otherwise create them root-owned.&#xD;
+Before installing: clone the repo and run CONTAINER_ENGINE="sudo docker" scripts/build.sh. The Data folder must be owned by the user in Extra Parameters (default --user 99:100), e.g. mkdir -p DIR &amp;&amp; chown 99:100 DIR.&#xD;
 &#xD;
-First start: open the console (or: docker exec -it claude-in-container tmux new -A -s main) and log in with your Claude subscription. The login persists in the Home folder.</Overview>
+Tools with a version set below install into the Data folder on first start. Several containers can share one Data folder: give each its own name and set Continue to false on all but one.&#xD;
+&#xD;
+First start: open the console (or: docker exec -it claude-in-container tmux new -A -s main) and log in with your Claude subscription.</Overview>
   <Category>Productivity: Tools:</Category>
   <WebUI/>
   <TemplateURL/>
@@ -23,8 +25,15 @@ First start: open the console (or: docker exec -it claude-in-container tmux new 
   <PostArgs/>
   <CPUset/>
   <Requires>Image built locally with scripts/build.sh from the project repository.</Requires>
-  <Config Name="Workspace" Target="/workspace" Default="" Mode="rw" Description="The only host folder Claude can see and edit, e.g. /mnt/user/projects" Type="Path" Display="always" Required="true" Mask="false"/>
-  <Config Name="Home" Target="/home/node" Default="/mnt/user/appdata/claude-in-container/home" Mode="rw" Description="Keeps the Claude login and settings across restarts" Type="Path" Display="always" Required="true" Mask="false">/mnt/user/appdata/claude-in-container/home</Config>
+  <Config Name="Data" Target="/data" Default="" Mode="rw" Description="The only host folder Claude sees: your projects, plus .home with login, settings and tools. Must be writable by the --user in Extra Parameters" Type="Path" Display="always" Required="true" Mask="false"/>
   <Config Name="Remote Control name" Target="REMOTE_CONTROL_NAME" Default="" Mode="" Description="Session name shown in the Claude app; empty = container hostname" Type="Variable" Display="always" Required="false" Mask="false"/>
+  <Config Name="Continue" Target="CONTINUE" Default="true" Mode="" Description="Resume the last conversation on start; false when another container shares this Data folder" Type="Variable" Display="always" Required="false" Mask="false">true</Config>
   <Config Name="Anthropic API key" Target="ANTHROPIC_API_KEY" Default="" Mode="" Description="Optional; use instead of the subscription login. Disables Remote Control (subscription-only)" Type="Variable" Display="advanced" Required="false" Mask="true"/>
+  <Config Name="gh version" Target="GH_VERSION" Default="2.101.0" Mode="" Description="GitHub CLI version installed on start; empty = not installed" Type="Variable" Display="advanced" Required="false" Mask="false">2.101.0</Config>
+  <Config Name="yq version" Target="YQ_VERSION" Default="4.53.6" Mode="" Description="yq version installed on start; empty = not installed" Type="Variable" Display="advanced" Required="false" Mask="false">4.53.6</Config>
+  <Config Name="jq version" Target="JQ_VERSION" Default="1.8.2" Mode="" Description="jq version installed on start; empty = not installed" Type="Variable" Display="advanced" Required="false" Mask="false">1.8.2</Config>
+  <Config Name="Terraform version" Target="TERRAFORM_VERSION" Default="1.16.4" Mode="" Description="Terraform version installed on start; empty = not installed" Type="Variable" Display="advanced" Required="false" Mask="false">1.16.4</Config>
+  <Config Name="AWS CLI version" Target="AWSCLI_VERSION" Default="2.37.4" Mode="" Description="AWS CLI v2 version installed on start; empty = not installed" Type="Variable" Display="advanced" Required="false" Mask="false">2.37.4</Config>
+  <Config Name="npm tools" Target="NPM_TOOLS" Default="pnpm@12.6.0 @usebruno/cli@4.2.0" Mode="" Description="Space-separated name@version list installed on start" Type="Variable" Display="advanced" Required="false" Mask="false">pnpm@12.6.0 @usebruno/cli@4.2.0</Config>
+  <Config Name="uv tools" Target="UV_TOOLS" Default="" Mode="" Description="Space-separated name==version list of Python CLIs installed on start" Type="Variable" Display="advanced" Required="false" Mask="false"/>
 </Container>

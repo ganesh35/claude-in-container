@@ -1,4 +1,6 @@
 # shellcheck shell=sh
+# zsh does not split unquoted variables; POSIX mode keeps every list loop in scripts/ working
+[ -z "${ZSH_VERSION:-}" ] || emulate sh
 # Shared setup for scripts/*.sh — sourced after the caller sets ROOT
 # pipefail where supported (POSIX 2024; dash lacks it)
 # shellcheck disable=SC3040 # guarded by the support check
@@ -14,6 +16,9 @@ else echo "Neither docker nor podman found" >&2; exit 1
 fi
 IMAGE="${IMAGE:-claude-in-container:local}"
 CONTAINER_NAME="${CONTAINER_NAME:-claude-in-container}"
+# Variables passed into the container when set (by run.sh; compose.yaml lists the same names)
+# shellcheck disable=SC2034 # used by run.sh
+CONTAINER_ENV="REMOTE_CONTROL_NAME ANTHROPIC_API_KEY CONTINUE GH_VERSION YQ_VERSION JQ_VERSION TERRAFORM_VERSION AWSCLI_VERSION NPM_TOOLS UV_TOOLS"
 
 # eval splits ENGINE into words in every shell, including zsh (no implicit word splitting)
 engine() { eval "$ENGINE" '"$@"'; }
