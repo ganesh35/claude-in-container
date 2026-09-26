@@ -1,0 +1,23 @@
+# Settings come from .env (see .env.example). Usage: docker compose up -d --build
+services:
+  claude:
+    build:
+      context: .
+      # Value-less: passed only when set, otherwise the Dockerfile default applies
+      args: [CLAUDE_CODE_VERSION]
+    image: ${IMAGE:-claude-in-container:local}
+    container_name: ${CONTAINER_NAME:-claude-in-container}
+    hostname: ${CONTAINER_NAME:-claude-in-container}
+    restart: unless-stopped
+    user: ${PUID:-1000}:${PGID:-1000}
+    environment: [REMOTE_CONTROL_NAME, ANTHROPIC_API_KEY]
+    volumes:
+      # Fail fast on missing folders: Docker would create them root-owned, unwritable for Claude
+      - type: bind
+        source: ${WORKSPACE_DIR:-./workspace}
+        target: /workspace
+        bind: { create_host_path: false }
+      - type: bind
+        source: ${CLAUDE_HOME_DIR:-./home}
+        target: /home/node
+        bind: { create_host_path: false }
