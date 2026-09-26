@@ -1,4 +1,6 @@
 # shellcheck shell=sh
+# zsh does not split unquoted variables; POSIX mode keeps every list loop in scripts/ working
+[ -z "${ZSH_VERSION:-}" ] || emulate sh
 # Shared setup for scripts/*.sh — sourced after the caller sets ROOT
 # pipefail where supported (POSIX 2024; dash lacks it)
 # shellcheck disable=SC3040 # guarded by the support check
