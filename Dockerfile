@@ -38,6 +38,7 @@ ENV PATH=/data/.home/.local/bin:$PATH NPM_CONFIG_PREFIX=/data/.home/.local
 USER 1000:1000
 WORKDIR /data
 COPY --chmod=755 start.sh install-tools.sh /usr/local/bin/
+COPY keys/aws-cli.asc /usr/local/share/claude-in-container/aws-cli.asc
 # Unhealthy when Claude exited and only the fallback shell remains; the long start period covers first-start tool installs
 HEALTHCHECK --interval=30s --timeout=5s --start-period=10m --retries=3 \
   CMD ["sh", "-c", "tmux has-session -t main 2>/dev/null && pgrep -x claude >/dev/null"]
