@@ -75,6 +75,19 @@ docker run -d --name claude-in-container --hostname claude-in-container --restar
 | Claude subscription (default) | ✅ | Log in once via `scripts/attach.sh`; stored in `CLAUDE_HOME_DIR/.claude/` |
 | API key | ❌ subscription-only | Set `ANTHROPIC_API_KEY` in `.env`; use `scripts/attach.sh` |
 
+### GitHub, git and AWS
+
+Configure other tools yourself inside the container. Everything lands in the mounted home folder (`CLAUDE_HOME_DIR`), so it survives restarts and rebuilds:
+
+```sh
+scripts/attach.sh    # then, in the fallback shell or a new tmux window (Ctrl-b c):
+gh auth login && gh auth setup-git    # GitHub CLI, and git push over HTTPS
+git config --global user.name "Your Name" && git config --global user.email "you@example.com"
+aws configure        # or: aws configure sso
+```
+
+Claude can use whatever you configure here, so prefer narrowly scoped credentials — a fine-grained GitHub token limited to the repos it should touch, a least-privilege IAM user or role — and protect the home folder like any credential store.
+
 ## Configuration (`.env`)
 
 | Variable | Default | Purpose |
