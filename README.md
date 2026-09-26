@@ -2,10 +2,35 @@
 
 Always-on [Claude Code](https://docs.claude.com/en/docs/claude-code) in a container, reachable from phone or browser via Remote Control. Runs on any Docker or Podman host — a server, a NAS (Unraid template included) or a laptop.
 
-- **Isolated:** Claude sees only the mounted workspace folder and runs as a non-root user without sudo.
-- **Persistent:** login and settings survive restarts in a mounted home folder; the last conversation resumes on start.
+## Why run Claude Code in a container?
+
+**Safer**
+- **Scoped file access:** Claude sees only the mounted workspace. Your home folder, SSH keys, cloud credentials and other projects stay invisible unless you mount them.
+- **Limited blast radius:** a bad command or runaway process hits the container, not your host. Recreate it in seconds; only the mounted folders are at risk.
+- **Non-root, no sudo:** Claude can't install system packages or change the host system.
+- **Explicit secrets:** Claude gets only the keys and tokens you pass in `.env` or a mount — nothing leaks in from your shell environment.
+- **No open ports:** Remote Control connects outbound to claude.ai; nothing listens on your network.
+- **Verified tools:** base image pinned by digest, release binaries checked against published checksums.
+
+**Always on, from anywhere**
+- **Runs 24/7** on a server, NAS or spare machine — your laptop can sleep or stay closed.
+- **Phone and browser access** through Remote Control in the Claude app or claude.ai/code.
+- **Survives disconnects:** Claude runs in tmux, so closing a terminal or losing SSH doesn't stop it.
+- **Picks up where it left off:** the last conversation resumes after a restart; the restart policy brings the container back after crashes or reboots.
+- **Visible health:** the healthcheck flags when Claude has stopped while the container is still up.
+
+**Consistent and reproducible**
 - **Batteries included:** Node 24/pnpm, Python/uv, git/gh, AWS CLI, Terraform, Bruno CLI, psql 18, jq/yq, shellcheck, build-essential and Playwright system deps (browsers install per project).
-- **Reproducible:** digest-pinned base, every tool version pinned; update by rebuilding.
+- **Same toolchain everywhere:** every tool version is pinned, so Claude works the same on every host.
+- **Controlled updates:** the auto-updater is off; you choose when to move to a new Claude Code version, and roll back by rebuilding the previous one.
+- **Clean host:** no global npm, pip or Terraform installs on your machine.
+
+**Portable and easy to operate**
+- **Runs anywhere:** Docker, Podman (rootless too), Compose or Unraid, on amd64 and arm64; scripts work in any POSIX shell.
+- **Movable setup:** login, settings and history live in one home folder — copy it to move to another host.
+- **Several instances side by side:** one container per project or client, each with its own workspace, login and session name.
+- **Resource caps:** limit CPU and memory with your engine's standard flags.
+- **Clean removal:** delete the container and its two folders; nothing else is left behind.
 
 ## Quick start
 
