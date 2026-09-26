@@ -9,7 +9,7 @@ Always-on [Claude Code](https://docs.claude.com/en/docs/claude-code) in a contai
 
 ## Quick start
 
-Requires Docker or Podman, and bash (macOS's built-in 3.2 works).
+Requires Docker or Podman and any POSIX shell (sh, dash, ash, bash, zsh).
 
 ```bash
 git clone https://github.com/ganesh35/claude-in-container.git && cd claude-in-container

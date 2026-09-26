@@ -74,7 +74,7 @@ WORKDIR /workspace
 COPY --chmod=755 start.sh /usr/local/bin/start.sh
 # Unhealthy when Claude exited and only the fallback shell remains in the tmux session
 HEALTHCHECK --interval=30s --timeout=5s --start-period=30s --retries=3 \
-  CMD ["bash", "-c", "tmux has-session -t main 2>/dev/null && pgrep -x claude >/dev/null"]
+  CMD ["sh", "-c", "tmux has-session -t main 2>/dev/null && pgrep -x claude >/dev/null"]
 # tini reaps zombies and forwards signals so the container stops cleanly
 ENTRYPOINT ["/usr/bin/tini", "--"]
 CMD ["/usr/local/bin/start.sh"]
