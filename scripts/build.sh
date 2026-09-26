@@ -1,11 +1,12 @@
-#!/usr/bin/env bash
+#!/bin/sh
 # Build the image. Usage: scripts/build.sh [--platform linux/amd64]
-set -euo pipefail
+set -eu
+ROOT=$(cd "$(dirname "$0")/.." && pwd)
 # shellcheck source=scripts/lib.sh
-. "$(dirname "$0")/lib.sh"
+. "$ROOT/scripts/lib.sh"
 
-args=(build -t "$IMAGE" "$@")
-[ -n "${CLAUDE_CODE_VERSION:-}" ] && args+=(--build-arg "CLAUDE_CODE_VERSION=$CLAUDE_CODE_VERSION")
+set -- build -t "$IMAGE" "$@"
+if [ -n "${CLAUDE_CODE_VERSION:-}" ]; then set -- "$@" --build-arg "CLAUDE_CODE_VERSION=$CLAUDE_CODE_VERSION"; fi
 # Podman's default OCI format drops HEALTHCHECK
-is_podman && args+=(--format docker)
-"${ENGINE[@]}" "${args[@]}" "$ROOT"
+if is_podman; then set -- "$@" --format docker; fi
+engine "$@" "$ROOT"
