@@ -5,3 +5,4 @@ data/
 .DS_Store
 # Local Claude instructions stay out of the repo
 CLAUDE.md
+TOWER.md
