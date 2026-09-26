@@ -1,0 +1,30 @@
+<?xml version="1.0"?>
+<!-- Local image: build it on the server first (scripts/build.sh); Unraid only pulls images that are missing -->
+<Container version="2">
+  <Name>claude-in-container</Name>
+  <Repository>claude-in-container:local</Repository>
+  <Registry/>
+  <Network>bridge</Network>
+  <MyIP/>
+  <Shell>bash</Shell>
+  <Privileged>false</Privileged>
+  <Support>https://github.com/ganesh35/claude-in-container/issues</Support>
+  <Project>https://github.com/ganesh35/claude-in-container</Project>
+  <Overview>Always-on Claude Code in tmux, reachable from phone or browser via Remote Control. Claude sees only the Workspace folder.&#xD;
+&#xD;
+Before installing: clone the repo and run CONTAINER_ENGINE="sudo docker" scripts/build.sh. Create the Workspace and Home folders owned by the user in Extra Parameters (default --user 99:100), e.g. mkdir -p DIR &amp;&amp; chown 99:100 DIR; Docker would otherwise create them root-owned.&#xD;
+&#xD;
+First start: open the console (or: docker exec -it claude-in-container tmux new -A -s main) and log in with your Claude subscription. The login persists in the Home folder.</Overview>
+  <Category>Productivity: Tools:</Category>
+  <WebUI/>
+  <TemplateURL/>
+  <Icon/>
+  <ExtraParams>--user 99:100 --hostname claude-in-container --restart unless-stopped</ExtraParams>
+  <PostArgs/>
+  <CPUset/>
+  <Requires>Image built locally with scripts/build.sh from the project repository.</Requires>
+  <Config Name="Workspace" Target="/workspace" Default="" Mode="rw" Description="The only host folder Claude can see and edit, e.g. /mnt/user/projects" Type="Path" Display="always" Required="true" Mask="false"/>
+  <Config Name="Home" Target="/home/node" Default="/mnt/user/appdata/claude-in-container/home" Mode="rw" Description="Keeps the Claude login and settings across restarts" Type="Path" Display="always" Required="true" Mask="false">/mnt/user/appdata/claude-in-container/home</Config>
+  <Config Name="Remote Control name" Target="REMOTE_CONTROL_NAME" Default="" Mode="" Description="Session name shown in the Claude app; empty = container hostname" Type="Variable" Display="always" Required="false" Mask="false"/>
+  <Config Name="Anthropic API key" Target="ANTHROPIC_API_KEY" Default="" Mode="" Description="Optional; use instead of the subscription login. Disables Remote Control (subscription-only)" Type="Variable" Display="advanced" Required="false" Mask="true"/>
+</Container>
