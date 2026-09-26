@@ -68,9 +68,11 @@ RUN npm install -g "@anthropic-ai/claude-code@${CLAUDE_CODE_VERSION}" "pnpm@${PN
 
 # Updates come from rebuilding the image, not in-place self-updates
 ENV DISABLE_AUTOUPDATER=1 TERM=xterm-256color LANG=C.UTF-8
+# Single mount: /data is the workspace, HOME lives inside it so every instance on the folder shares it
+ENV HOME=/data/.home
 # node user; numeric so runtimes can verify it is non-root
 USER 1000:1000
-WORKDIR /workspace
+WORKDIR /data
 COPY --chmod=755 start.sh /usr/local/bin/start.sh
 # Unhealthy when Claude exited and only the fallback shell remains in the tmux session
 HEALTHCHECK --interval=30s --timeout=5s --start-period=30s --retries=3 \
