@@ -96,11 +96,11 @@ On every start, `install-tools.sh` installs each tool whose version is set and s
 | Variable | Installs |
 |---|---|
 | `GH_VERSION`, `YQ_VERSION`, `JQ_VERSION`, `TERRAFORM_VERSION` | Release binaries, verified against the published SHA256 checksums |
-| `AWSCLI_VERSION` | AWS CLI v2 (HTTPS only; AWS publishes a GPG signature, not a checksum) |
+| `AWSCLI_VERSION` | AWS CLI v2, verified by its GPG signature against the AWS CLI key pinned by fingerprint ([`keys/aws-cli.asc`](keys/aws-cli.asc), expires 2027-07-01) |
 | `NPM_TOOLS` | Space-separated `name@version` list, via npm |
 | `UV_TOOLS` | Space-separated `name==version` list of Python CLIs, via uv |
 
-An empty value installs nothing. A failed download or install is logged and Claude starts without that tool; a **checksum mismatch stops the container**. Removing a tool from `.env` doesn't uninstall it. System packages (Python, git, psql, build-essential) are part of the image.
+An empty value installs nothing. A failed download or install is logged and Claude starts without that tool; a **failed checksum or signature check stops the container**. Removing a tool from `.env` doesn't uninstall it. System packages (Python, git, psql, build-essential) are part of the image.
 
 ### Several instances
 
@@ -165,7 +165,7 @@ Compose users update with `CLAUDE_CODE_VERSION=<version>` in `.env`, then `docke
 
 ## Testing
 
-`scripts/test.sh` lints, builds a throwaway image and runs the scripts end to end under every installed shell in `TEST_SHELLS` (default `dash ash bash zsh`; missing ones are skipped). It also covers instances sharing a folder and tool installs (missing, current, version change, failure, checksum mismatch). It works on a temporary copy without your `.env`, and removes only the containers, image and folders it created.
+`scripts/test.sh` lints, builds a throwaway image and runs the scripts end to end under every installed shell in `TEST_SHELLS` (default `dash ash bash zsh`; missing ones are skipped). It also covers instances sharing a folder and tool installs (missing, current, version change, failure, checksum mismatch, bad signature). It works on a temporary copy without your `.env`, and removes only the containers, image and folders it created.
 
 For all four shells on a Docker host, run it inside an Alpine helper that uses the host's Docker. The shared folder must have the same path on host and helper, because the Docker daemon resolves bind mounts on the host:
 

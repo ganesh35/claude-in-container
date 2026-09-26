@@ -12,7 +12,7 @@ case ${CONTINUE:-true} in
   *) echo "CONTINUE must be true or false, got '$CONTINUE'" >&2; exit 1 ;;
 esac
 
-# A checksum mismatch (exit 2) stops the container; any other installer problem is logged and Claude starts anyway
+# A failed checksum or signature check (exit 2) stops the container; any other installer problem is logged and Claude starts anyway
 rc=0
 install-tools.sh || rc=$?
 if [ "$rc" -eq 2 ]; then exit 2; fi

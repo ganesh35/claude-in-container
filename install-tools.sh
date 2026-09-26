@@ -1,6 +1,6 @@
 #!/bin/sh
 # Installs tools pinned in the environment into $HOME/.local, skipping any already at that version.
-# Download or install errors are logged and skipped; a checksum mismatch exits 2 so the container stops.
+# Download or install errors are logged and skipped; a failed checksum or signature check exits 2 so the container stops.
 set -eu
 prefix="$HOME/.local" state="$HOME/.local/share/cic-tools" lock="$HOME/.local/.install-tools.lock"
 export UV_TOOL_DIR="$prefix/share/uv/tools" UV_TOOL_BIN_DIR="$prefix/bin"
@@ -15,6 +15,14 @@ log() { echo "tools: $*"; }
 fetch() { curl -fsSL --retry 3 -o "$2" "$1"; }
 # Fails on a missing or wrong checksum; callers map that to exit 2
 sha_ok() { [ -n "$2" ] && [ "$(sha256sum "$1" | cut -d' ' -f1)" = "$2" ]; }
+# AWS CLI signing key from the AWS CLI install guide; it expires 2027-07-01, then refresh keys/aws-cli.asc from the guide
+aws_key=/usr/local/share/claude-in-container/aws-cli.asc aws_fpr=FB5DB77FD5C118B80511ADA8A6310ACC4672475C
+# Valid signature by the pinned fingerprint only, so a swapped key file can't pass either
+aws_sig_ok() (
+  export GNUPGHOME="$PWD/gnupg"
+  mkdir -m 700 "$GNUPGHOME" && gpg --batch --quiet --import "$aws_key" 2>/dev/null &&
+    gpg --batch --status-fd 1 --verify "$1.sig" "$1" 2>/dev/null | grep "^\[GNUPG:\] VALIDSIG $aws_fpr " >/dev/null
+)
 
 # Installers run in a temp dir and get the version as their last argument.
 # set -e is off inside || contexts, so every step checks its own result.
@@ -42,9 +50,11 @@ install_terraform() {
   sha_ok "$f" "$(awk -v f="$f" '$2 == f {print $1}' sums)" || return 2
   unzip -q "$f" terraform && install terraform "$prefix/bin/terraform"
 }
-# AWS publishes a GPG signature, not a checksum; the download is over HTTPS from awscli.amazonaws.com
 install_aws() {
-  fetch "https://awscli.amazonaws.com/awscli-exe-linux-$awsarch-$1.zip" aws.zip && unzip -q aws.zip || return 1
+  u="https://awscli.amazonaws.com/awscli-exe-linux-$awsarch-$1.zip"
+  fetch "$u" aws.zip && fetch "$u.sig" aws.zip.sig || return 1
+  aws_sig_ok aws.zip || return 2
+  unzip -q aws.zip || return 1
   ./aws/install --install-dir "$prefix/aws-cli" --bin-dir "$prefix/bin" --update
 }
 install_npm() { npm install -g --prefix "$prefix" "$1"; }
@@ -60,7 +70,7 @@ run() { # key wanted-version binary-or-empty installer [args...]
   (cd "$d" && "$@" "$want") > "$d/.log" 2>&1 || rc=$?
   case $rc in
     0) printf '%s\n' "$want" > "$state/$key"; log "$key $want installed" ;;
-    2) log "$key $want CHECKSUM MISMATCH, stopping"; rm -rf "$d"; exit 2 ;;
+    2) log "$key $want VERIFICATION FAILED (checksum or signature), stopping"; rm -rf "$d"; exit 2 ;;
     *) log "$key $want FAILED, continuing without it"; tail -n 3 "$d/.log" | sed 's/^/tools:   /' ;;
   esac
   rm -rf "$d"

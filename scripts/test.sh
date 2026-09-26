@@ -10,7 +10,7 @@ ROOT=$(cd "$(dirname "$0")/.." && pwd)
 # Work on a copy without .env, so a user's CONTAINER_NAME can never point tests at a real container
 work=$(mktemp -d "${TMPDIR:-/tmp}/cic-test.XXXXXX")
 repo="$work/repo"
-mkdir "$repo" && cp -R "$ROOT/Dockerfile" "$ROOT/start.sh" "$ROOT/install-tools.sh" "$ROOT/scripts" "$repo/"
+mkdir "$repo" && cp -R "$ROOT/Dockerfile" "$ROOT/start.sh" "$ROOT/install-tools.sh" "$ROOT/scripts" "$ROOT/keys" "$repo/"
 for v in $CONTAINER_ENV CLAUDE_CODE_VERSION CONTAINER_NAME DATA_DIR; do unset "$v"; done
 CONTAINER_ENGINE=$ENGINE IMAGE="claude-in-container:test-$$" PUID=$(id -u) PGID=$(id -g)
 export CONTAINER_ENGINE IMAGE PUID PGID
@@ -97,25 +97,30 @@ check "second: shares the login folder" 0 "$(rc engine exec "$second" test -f /d
 check "second: uses the shared jq" jq-1.8.2 "$(engine exec "$second" jq --version)"
 
 echo "== tool installs"
-JQ_VERSION=1.8.1 TERRAFORM_VERSION=0.0.0-e2e sh "$repo/scripts/run.sh" --replace >/dev/null || true
+JQ_VERSION=1.8.1 TERRAFORM_VERSION=0.0.0-e2e AWSCLI_VERSION=2.37.4 sh "$repo/scripts/run.sh" --replace >/dev/null || true
 check "healthy despite a failed install" healthy "$(wait_healthy "$main")"
 check "jq reinstalled on version change" jq-1.8.1 "$(engine exec "$main" jq --version)"
 check "failed install is logged" yes "$(logged "$main" "terraform 0.0.0-e2e FAILED, continuing")"
-# Test-only curl that corrupts the yq download, reached via PATH
+check "AWS CLI installed after signature check" yes "$(logged "$main" "aws 2.37.4 installed")"
+# Test-only curl that corrupts downloads matching FAKE_CORRUPT, reached via PATH
 mkdir "$work/fakebin"
 cat > "$work/fakebin/curl" <<'FAKE'
 #!/bin/sh
 /usr/bin/curl "$@"; rc=$?; out=""
 while [ $# -gt 0 ]; do [ "$1" = -o ] && out=$2; shift; done
-case $out in yq_linux_*) printf x >> "$out" ;; esac
+case $out in $FAKE_CORRUPT) printf x >> "$out" ;; esac
 exit $rc
 FAKE
 chmod +x "$work/fakebin/curl"
-name="$prefix-mismatch"; created="$created $name"; mkdir "$work/mismatch"
-engine run -d --name "$name" --user "$PUID:$PGID" -v "$work/mismatch:/data" -v "$work/fakebin:/fakebin:ro" \
-  -e PATH=/fakebin:/data/.home/.local/bin:/usr/local/bin:/usr/bin:/bin -e YQ_VERSION=4.53.6 "$IMAGE" >/dev/null || true
-check "checksum mismatch stops the container" 2 "$(wait_exit "$name")"
-check "checksum mismatch is logged" yes "$(logged "$name" "yq 4.53.6 CHECKSUM MISMATCH")"
+corrupt() { # label env-assignment file-pattern: container must stop with exit 2 and log the failure
+  name="$prefix-$1"; created="$created $name"; mkdir "$work/$1"
+  engine run -d --name "$name" --user "$PUID:$PGID" -v "$work/$1:/data" -v "$work/fakebin:/fakebin:ro" -e "FAKE_CORRUPT=$3" \
+    -e PATH=/fakebin:/data/.home/.local/bin:/usr/local/bin:/usr/bin:/bin -e "$2" "$IMAGE" >/dev/null || true
+  check "$1 stops the container" 2 "$(wait_exit "$name")"
+  check "$1 is logged" yes "$(logged "$name" "VERIFICATION FAILED")"
+}
+corrupt checksum-mismatch YQ_VERSION=4.53.6 'yq_linux_*'
+corrupt bad-signature AWSCLI_VERSION=2.37.4 aws.zip
 
 echo "== behaviour"
 name="$prefix-behaviour"; use "$name" "$work/behaviour"
