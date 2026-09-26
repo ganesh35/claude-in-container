@@ -25,7 +25,7 @@ Detach with `Ctrl-b d` — Claude keeps running. Open the Claude app → Code, o
 
 | Method | Command | Notes |
 |---|---|---|
-| Docker Compose | `mkdir -p workspace home && docker compose up -d --build` | Reads `.env`; fails fast if mount folders are missing (Docker would create them root-owned) |
+| Docker Compose | `mkdir -p workspace home && docker compose up -d --build` | Reads `.env`; on Docker, fails fast if mount folders are missing (it would create them root-owned); Podman creates them owned by you |
 | Plain docker | see below | |
 | Podman (rootless) | `scripts/run.sh` | Adds `--userns keep-id` so files keep your host owner; Compose can't express this portably |
 | Unraid | [`unraid/claude-in-container.xml`](unraid/claude-in-container.xml) | See [Unraid](#unraid) |
