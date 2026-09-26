@@ -16,10 +16,13 @@ if engine container inspect "$CONTAINER_NAME" >/dev/null 2>&1; then
   engine rm -f "$CONTAINER_NAME" >/dev/null
 fi
 
-# Names only for -e: values come from .env via lib.sh, so the key never shows up in the process list
+# Env file rather than -e NAME: sudo drops the caller's environment; values also stay out of the process list
+envfile=$(mktemp)
+trap 'rm -f "$envfile"' EXIT
+{ [ -z "${REMOTE_CONTROL_NAME+x}" ] || printf 'REMOTE_CONTROL_NAME=%s\n' "$REMOTE_CONTROL_NAME"
+  [ -z "${ANTHROPIC_API_KEY+x}" ] || printf 'ANTHROPIC_API_KEY=%s\n' "$ANTHROPIC_API_KEY"; } > "$envfile"
 set -- run -d --name "$CONTAINER_NAME" --hostname "$CONTAINER_NAME" --restart unless-stopped \
-  --user "$uid:$gid" -v "$workspace:/workspace" -v "$home:/home/node" \
-  -e REMOTE_CONTROL_NAME -e ANTHROPIC_API_KEY
+  --user "$uid:$gid" -v "$workspace:/workspace" -v "$home:/home/node" --env-file "$envfile"
 # Rootless Podman: map the host user to PUID/PGID so mounted files keep their owner
 if is_podman && [ "$(id -u)" != 0 ]; then set -- "$@" --userns "keep-id:uid=$uid,gid=$gid"; fi
 engine "$@" "$IMAGE" >/dev/null

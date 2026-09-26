@@ -99,8 +99,21 @@ Other tool versions are build args in the [`Dockerfile`](Dockerfile) (`GH_VERSIO
 | `scripts/attach.sh` | Attach to Claude's tmux session |
 | `scripts/update.sh [version]` | Pin a Claude Code version (default: latest) in `.env`, rebuild, recreate |
 | `scripts/lint.sh` | shellcheck + hadolint via pinned containers |
+| `scripts/test.sh` | End-to-end tests on a throwaway copy; see [Testing](#testing) |
 
 Compose users update with `CLAUDE_CODE_VERSION=<version>` in `.env`, then `docker compose up -d --build`.
+
+## Testing
+
+`scripts/test.sh` lints, builds a throwaway image and runs the scripts end to end under every installed shell in `TEST_SHELLS` (default `dash ash bash zsh`; missing ones are skipped). It works on a temporary copy without your `.env`, and removes only the containers, image and folders it created.
+
+For all four shells on a Docker host, run it inside an Alpine helper that uses the host's Docker. The shared folder must have the same path on host and helper, because the Docker daemon resolves bind mounts on the host:
+
+```sh
+mkdir -p /tmp/cic-test && docker run --rm -v /var/run/docker.sock:/var/run/docker.sock \
+  -v "$PWD:/repo:ro" -v /tmp/cic-test:/tmp/cic-test -e TMPDIR=/tmp/cic-test -w /repo alpine:3 \
+  sh -c 'apk add -q docker-cli docker-cli-buildx dash bash zsh tar && sh scripts/test.sh'
+```
 
 ## Behaviour
 
