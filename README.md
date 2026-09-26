@@ -158,7 +158,7 @@ Image-level versions (base image, `UV_VERSION`, `PLAYWRIGHT_VERSION`, `PG_MAJOR`
 | `scripts/run.sh [--replace] [--name <instance>]` | Start the container; `--replace` recreates it, `--name` runs another instance on the same `DATA_DIR` |
 | `scripts/attach.sh [--name <instance>]` | Attach to Claude's tmux session |
 | `scripts/update.sh [version]` | Pin a Claude Code version (default: latest) in `.env`, rebuild, recreate the main instance (recreate others with `run.sh --replace --name …`) |
-| `scripts/lint.sh` | shellcheck + hadolint via pinned containers |
+| `scripts/lint.sh` | Drift check of variables across `.env.example`, `compose.yaml` and the Unraid template, then shellcheck + hadolint via pinned containers |
 | `scripts/test.sh` | End-to-end tests on a throwaway copy; see [Testing](#testing) |
 
 Compose users update with `CLAUDE_CODE_VERSION=<version>` in `.env`, then `docker compose up -d --build`.
