@@ -39,10 +39,12 @@ Requires Docker or Podman and any POSIX shell (sh, dash, ash, bash, zsh).
 ```bash
 git clone https://github.com/ganesh35/claude-in-container.git && cd claude-in-container
 cp .env.example .env    # set DATA_DIR and PUID/PGID; adjust tool versions
-scripts/build.sh
+scripts/build.sh        # or skip: set IMAGE=ghcr.io/ganesh35/claude-in-container:latest in .env to pull the published image
 scripts/run.sh
 scripts/attach.sh       # first run: pick a theme, log in with your Claude subscription
 ```
+
+The published image (`ghcr.io/ganesh35/claude-in-container`, amd64) is tagged with the Claude Code version it carries and `latest`; it is what the Unraid template installs.
 
 The first start installs the tools pinned in `.env` into the data folder (about a minute; `docker logs` shows progress). Later starts only check versions.
 
@@ -65,10 +67,9 @@ docker run -d --name claude-in-container --hostname claude-in-container --restar
 
 ### Unraid
 
-1. Clone the repo on the server and build: `CONTAINER_ENGINE="sudo docker" scripts/build.sh` (Unraid only pulls images that are missing, so the local image is used).
-2. Create the data folder owned by the container user: `mkdir -p DIR && chown 99:100 DIR`.
-3. Copy the template to `/boot/config/plugins/dockerMan/templates-user/my-claude-in-container.xml`, then Docker → Add Container → pick it. Set **Data**, adjust `--user` in Extra Parameters to match the folder's owner, and tool versions under *Show more settings*.
-4. Open the container console and log in.
+1. Create the data folder owned by the container user: `mkdir -p DIR && chown 99:100 DIR`.
+2. Install from **Apps** (Community Applications) once listed — or copy the template to `/boot/config/plugins/dockerMan/templates-user/my-claude-in-container.xml` and use Docker → Add Container. Set **Data**, adjust `--user` in Extra Parameters to match the folder's owner, and tool versions under *Show more settings*. The template pulls the published image; to run your own build instead, build it on the server and set Repository to its tag.
+3. Open the container console and log in.
 
 ## Data folder
 
