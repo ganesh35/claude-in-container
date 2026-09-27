@@ -1,0 +1,7 @@
+<?xml version="1.0"?>
+<!-- Community Applications repository profile: https://ca.unraid.net/submit/help/repository-info-xml -->
+<CommunityApplications>
+  <Profile>Always-on Claude Code in a container, reachable from phone or browser via Remote Control. One app: claude-in-container. It runs unprivileged with a single data folder as its only mount, installs its toolchain (git, gh, jq, yq, Terraform, AWS CLI, pnpm, Bruno CLI, Python/uv) at first start from pinned, verified downloads, and keeps your Claude login in that folder. Support and bug reports: GitHub issues.</Profile>
+  <Icon>https://raw.githubusercontent.com/ganesh35/claude-in-container/main/unraid/icon.png</Icon>
+  <WebPage>https://github.com/ganesh35/claude-in-container</WebPage>
+</CommunityApplications>
