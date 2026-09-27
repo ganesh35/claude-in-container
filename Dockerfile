@@ -1,6 +1,7 @@
 # syntax=docker/dockerfile:1
-# Base: Node 24 LTS, pinned by digest for reproducible builds
-ARG NODE_IMAGE=node:24.21.0-bookworm-slim@sha256:0e0ff40c39bc087845bfb27465a0df4ea419520094bc35842ff83dd8cbe6f9b6
+# Base: Node 24 LTS, pinned by digest for reproducible builds. Registry images are fully qualified: Podman on
+# Fedora-family hosts enforces short-name resolution and refuses bare Docker Hub names without a TTY
+ARG NODE_IMAGE=docker.io/library/node:24.21.0-bookworm-slim@sha256:0e0ff40c39bc087845bfb27465a0df4ea419520094bc35842ff83dd8cbe6f9b6
 ARG UV_IMAGE=ghcr.io/astral-sh/uv:0.12.19@sha256:04d046b13e60d6bcec73cbc5e1cad25d680dea90c8573340950a0ac2d1aef424
 
 FROM ${UV_IMAGE} AS uv
