@@ -30,8 +30,10 @@ trap 'rm -f "$envfile"' EXIT
 for v in $CONTAINER_ENV; do
   eval "[ -z \"\${$v+x}\" ] || printf '%s=%s\n' $v \"\$$v\""
 done > "$envfile"
+# Nothing in the image needs Linux capabilities or setuid escalation; drop both
 set -- run -d --name "$CONTAINER_NAME" --hostname "$CONTAINER_NAME" --restart unless-stopped \
-  --user "$uid:$gid" -v "$data:/data" --env-file "$envfile"
+  --user "$uid:$gid" --cap-drop ALL --security-opt no-new-privileges \
+  -v "$data:/data" --env-file "$envfile"
 # Rootless Podman: map the host user to PUID/PGID so mounted files keep their owner
 if is_podman && [ "$(id -u)" != 0 ]; then set -- "$@" --userns "keep-id:uid=$uid,gid=$gid"; fi
 engine "$@" "$IMAGE" >/dev/null

@@ -12,7 +12,8 @@ case $(uname -m) in
 esac
 
 log() { echo "tools: $*"; }
-fetch() { curl -fsSL --retry 3 -o "$2" "$1"; }
+# HTTPS only, including redirects: a redirect to plain http would otherwise be followed
+fetch() { curl -fsSL --proto '=https' --proto-redir '=https' --retry 3 -o "$2" "$1"; }
 # Fails on a missing or wrong checksum; callers map that to exit 2
 sha_ok() { [ -n "$2" ] && [ "$(sha256sum "$1" | cut -d' ' -f1)" = "$2" ]; }
 # AWS CLI signing key from the AWS CLI install guide; it expires 2027-07-01, then refresh keys/aws-cli.asc from the guide
@@ -93,15 +94,15 @@ run aws "${AWSCLI_VERSION:-}" aws install_aws
 
 set -f # lists are split on spaces, never globbed
 for spec in ${NPM_TOOLS:-}; do
-  # name@version, version required; scoped names start with @
+  # name@version with a numeric version, so a git/file/URL spec can't slip in; scoped names start with @
   case $spec in
-    ?*@?*) run "npm-$(printf '%s' "${spec%@*}" | tr '/@' '__')" "$spec" "" install_npm "$spec" ;;
+    ?*@[0-9]*) run "npm-$(printf '%s' "${spec%@*}" | tr '/@' '__')" "$spec" "" install_npm "$spec" ;;
     *) log "npm $spec FAILED: pin a version as name@version" ;;
   esac
 done
 for spec in ${UV_TOOLS:-}; do
   case $spec in
-    ?*==?*) run "uv-${spec%%==*}" "$spec" "" install_uv "$spec" ;;
+    ?*==[0-9]*) run "uv-${spec%%==*}" "$spec" "" install_uv "$spec" ;;
     *) log "uv $spec FAILED: pin a version as name==version" ;;
   esac
 done
