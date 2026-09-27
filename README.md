@@ -161,6 +161,7 @@ Image-level versions (base image, `UV_VERSION`, `PLAYWRIGHT_VERSION`, `PG_MAJOR`
 | `scripts/lint.sh` | Drift check of variables across `.env.example`, `compose.yaml` and the Unraid template, then shellcheck + hadolint via pinned containers |
 | `scripts/test.sh` | End-to-end tests on a throwaway copy; see [Testing](#testing) |
 | `scripts/ci.sh` | `lint.sh` then `test.sh` — the CI entrypoint; run it before opening a PR |
+| `scripts/outdated.sh` | Report newer versions of pinned tools, Claude Code, Playwright and the Node base image; read-only |
 
 Compose users update with `CLAUDE_CODE_VERSION=<version>` in `.env`, then `docker compose up -d --build`.
 
