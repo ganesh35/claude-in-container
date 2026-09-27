@@ -57,6 +57,7 @@ has_arg() { # container arg: yes if the claude process got arg as one argument
 }
 
 echo "== lint"
+check "publish.sh refuses to run without a token" 1 "$(rc sh "$ROOT/scripts/publish.sh")"
 check lint.sh 0 "$(rc sh "$ROOT/scripts/lint.sh")"
 echo "== build"
 check build.sh 0 "$(rc sh "$repo/scripts/build.sh")"

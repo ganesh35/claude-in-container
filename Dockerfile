@@ -31,6 +31,10 @@ RUN npm install -g "@anthropic-ai/claude-code@${CLAUDE_CODE_VERSION}" \
     && npx -y "playwright@${PLAYWRIGHT_VERSION}" install-deps \
     && npm cache clean --force && rm -rf /var/lib/apt/lists/* /root/.npm
 
+# OCI labels: source links the GHCR package to this repository
+LABEL org.opencontainers.image.source="https://github.com/ganesh35/claude-in-container" \
+      org.opencontainers.image.description="Always-on Claude Code in a container, reachable via Remote Control" \
+      org.opencontainers.image.licenses="MIT"
 # Updates come from rebuilding the image, not in-place self-updates
 ENV DISABLE_AUTOUPDATER=1 TERM=xterm-256color LANG=C.UTF-8
 # Single mount: /data is the workspace, HOME lives inside it so every instance on the folder shares it
