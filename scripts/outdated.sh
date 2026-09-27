@@ -6,7 +6,7 @@ ROOT=$(cd "$(dirname "$0")/.." && pwd)
 . "$ROOT/scripts/lib.sh"
 
 # Runs entirely inside a throwaway Alpine container (3.24.2, digest-pinned) so curl/jq are never required on the host
-engine run --rm -i -v "$ROOT:/repo:ro" -e LANG=C.UTF-8 --entrypoint sh alpine:3@sha256:294b683cb724975bec92580e1e685676bd4b50bda910ddb8c51d4cabeaec77e6 <<'CHECK'
+engine run --rm -i -v "$ROOT:/repo:ro" -e LANG=C.UTF-8 --entrypoint sh docker.io/library/alpine:3@sha256:294b683cb724975bec92580e1e685676bd4b50bda910ddb8c51d4cabeaec77e6 <<'CHECK'
 set -eu
 apk add -q curl jq >/dev/null
 cd /repo

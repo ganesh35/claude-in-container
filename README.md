@@ -54,7 +54,7 @@ Detach with `Ctrl-b d` — Claude keeps running. Open the Claude app → Code, o
 |---|---|---|
 | Docker Compose | `mkdir -p data && docker compose up -d --build` | Reads `.env`; on Docker, fails fast if the data folder is missing (it would create it root-owned); Podman creates it owned by you |
 | Plain docker | see below | |
-| Podman (rootless) | `scripts/run.sh` | Adds `--userns keep-id` so files keep your host owner; Compose can't express this portably |
+| Podman (rootless) | `scripts/run.sh` | Adds `--userns keep-id` so files keep your host owner; Compose can't express this portably. All registry images are fully qualified, so Podman's short-name enforcement is never triggered |
 | Unraid | [`unraid/claude-in-container.xml`](unraid/claude-in-container.xml) | See [Unraid](#unraid) |
 
 ```bash
@@ -173,8 +173,20 @@ For all four shells on a Docker host, run it inside an Alpine helper that uses t
 
 ```sh
 mkdir -p /tmp/cic-test && docker run --rm -v /var/run/docker.sock:/var/run/docker.sock \
-  -v "$PWD:/repo:ro" -v /tmp/cic-test:/tmp/cic-test -e TMPDIR=/tmp/cic-test -w /repo alpine:3@sha256:294b683cb724975bec92580e1e685676bd4b50bda910ddb8c51d4cabeaec77e6 \
+  -v "$PWD:/repo:ro" -v /tmp/cic-test:/tmp/cic-test -e TMPDIR=/tmp/cic-test -w /repo docker.io/library/alpine:3@sha256:294b683cb724975bec92580e1e685676bd4b50bda910ddb8c51d4cabeaec77e6 \
   sh -c 'apk add -q docker-cli docker-cli-buildx dash bash zsh tar && sh scripts/test.sh'
+```
+
+### Under Podman
+
+The suite passes on Podman 5.8 (rootful). Without a Podman host, run it inside Podman's own image on any Docker host — three harness-only adjustments are needed: that image defaults nested containers to the host UTS/network namespaces (so `--hostname` is refused), its healthchecks depend on systemd timers (absent, so status would never leave `starting`), and Fedora has no `ash`:
+
+```sh
+docker run --rm --privileged --device /dev/fuse -v "$PWD:/repo:ro" -e CONTAINER_ENGINE=podman -w /repo quay.io/podman/stable sh -c '
+  dnf install -y -q dash zsh tar busybox && ln -s "$(command -v busybox)" /usr/local/bin/ash
+  printf "[containers]\nutsns = \"private\"\nnetns = \"private\"\n" > /tmp/cc.conf; export CONTAINERS_CONF_OVERRIDE=/tmp/cc.conf
+  ( while true; do for c in $(podman ps -q); do podman healthcheck run "$c" >/dev/null 2>&1; done; sleep 5; done ) &
+  sh scripts/ci.sh'
 ```
 
 ## Behaviour
