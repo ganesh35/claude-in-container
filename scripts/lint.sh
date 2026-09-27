@@ -22,8 +22,8 @@ done
 echo "No drift between .env.example, compose.yaml and $tpl"
 
 # Files are streamed in, not mounted, so this also works where the engine can't see the repo path
-tar -c start.sh install-tools.sh scripts | engine run --rm -i -e LANG=C.UTF-8 --entrypoint sh koalaman/shellcheck-alpine:v0.11.0 \
+tar -c start.sh install-tools.sh scripts | engine run --rm -i -e LANG=C.UTF-8 --entrypoint sh koalaman/shellcheck-alpine:v0.11.0@sha256:9955be09ea7f0dbf7ae942ac1f2094355bb30d96fffba0ec09f5432207544002 \
   -c 'mkdir /src && cd /src && tar -x && shellcheck -x start.sh install-tools.sh scripts/*.sh'
 # DL3008: apt versions are not pinned; Debian drops old ones, and the digest-pinned base keeps builds reproducible
-engine run --rm -i hadolint/hadolint:v2.15.1 hadolint --ignore DL3008 - < Dockerfile
+engine run --rm -i hadolint/hadolint:v2.15.1@sha256:32dac94127fd60b7b7e3fbfc65e1383b9b5e25c9bfd7b8536de7a539fe68a12d hadolint --ignore DL3008 - < Dockerfile
 echo "Lint passed"

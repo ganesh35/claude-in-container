@@ -102,6 +102,9 @@ check "healthy despite a failed install" healthy "$(wait_healthy "$main")"
 check "jq reinstalled on version change" jq-1.8.1 "$(engine exec "$main" jq --version)"
 check "failed install is logged" yes "$(logged "$main" "terraform 0.0.0-e2e FAILED, continuing")"
 check "AWS CLI installed after signature check" yes "$(logged "$main" "aws 2.37.4 installed")"
+# exec re-runs the installer in the live container with extra vars; existing tools just report up to date
+check "npm tool with a numeric version installs" yes "$(engine exec -e NPM_TOOLS=cowsay@1.6.0 "$main" install-tools.sh 2>&1 | grep -F "cowsay@1.6.0 installed" >/dev/null && echo yes || echo no)"
+check "npm spec without a numeric version is rejected" yes "$(engine exec -e NPM_TOOLS=e2e-bad@git+https://example.com/x.git "$main" install-tools.sh 2>&1 | grep -F "e2e-bad@git+https://example.com/x.git FAILED: pin a version" >/dev/null && echo yes || echo no)"
 # Test-only curl that corrupts downloads matching FAKE_CORRUPT, reached via PATH
 mkdir "$work/fakebin"
 cat > "$work/fakebin/curl" <<'FAKE'
@@ -127,6 +130,9 @@ name="$prefix-behaviour"; use "$name" "$work/behaviour"
 REMOTE_CONTROL_NAME=e2e; export REMOTE_CONTROL_NAME
 sh "$repo/scripts/run.sh" >/dev/null || true
 wait_healthy "$name" >/dev/null
+# Engine-agnostic (docker and podman report CapDrop differently): read the kernel's view from inside
+check "all capabilities dropped" 0000000000000000 "$(engine exec "$name" sh -c "grep ^CapEff /proc/self/status | cut -f2")"
+check "no-new-privileges set" 1 "$(engine exec "$name" sh -c "grep ^NoNewPrivs /proc/self/status | cut -f2")"
 hc=$(engine inspect -f '{{index .Config.Healthcheck.Test 3}}' "$name")
 check "healthcheck passes while claude runs" 0 "$(rc engine exec "$name" sh -c "$hc")"
 # Twice: start.sh falls back from 'claude --continue' to a fresh 'claude'

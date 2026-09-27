@@ -148,7 +148,7 @@ Claude can use whatever you configure here, so prefer narrowly scoped credential
 | `CONTAINER_ENGINE` | auto (docker, then podman) | e.g. `sudo docker` where docker needs root |
 | `IMAGE` / `CONTAINER_NAME` | `claude-in-container:local` / `claude-in-container` | |
 
-Image-level versions (base image, `UV_VERSION`, `PLAYWRIGHT_VERSION`, `PG_MAJOR`) are build args in the [`Dockerfile`](Dockerfile); override with `scripts/build.sh --build-arg NAME=VALUE`.
+Image-level versions (`NODE_IMAGE`, `UV_IMAGE` — both digest-pinned — `PLAYWRIGHT_VERSION`, `PG_MAJOR`) are build args in the [`Dockerfile`](Dockerfile); override with `scripts/build.sh --build-arg NAME=VALUE`.
 
 ## Scripts
 
@@ -173,7 +173,7 @@ For all four shells on a Docker host, run it inside an Alpine helper that uses t
 
 ```sh
 mkdir -p /tmp/cic-test && docker run --rm -v /var/run/docker.sock:/var/run/docker.sock \
-  -v "$PWD:/repo:ro" -v /tmp/cic-test:/tmp/cic-test -e TMPDIR=/tmp/cic-test -w /repo alpine:3 \
+  -v "$PWD:/repo:ro" -v /tmp/cic-test:/tmp/cic-test -e TMPDIR=/tmp/cic-test -w /repo alpine:3@sha256:294b683cb724975bec92580e1e685676bd4b50bda910ddb8c51d4cabeaec77e6 \
   sh -c 'apk add -q docker-cli docker-cli-buildx dash bash zsh tar && sh scripts/test.sh'
 ```
 
@@ -190,6 +190,8 @@ mkdir -p /tmp/cic-test && docker run --rm -v /var/run/docker.sock:/var/run/docke
 - Use a dedicated `DATA_DIR`; never point it at a personal share, `~/.ssh` or cloud credentials you don't want Claude to use.
 - `DATA_DIR/.home` holds your logins; anyone who can read the folder (for example over a network share) can read them.
 - No ports are exposed; Remote Control connects outbound to claude.ai.
+- The container runs with every Linux capability dropped and `no-new-privileges`; nothing in the image needs either.
+- Every download is HTTPS-only (redirects to plain HTTP are refused) and verified by checksum or signature; helper images are pinned by digest.
 - The auto-updater is disabled; updates happen only by rebuilding.
 - Keep `.env` out of git (already ignored).
 

@@ -21,7 +21,7 @@ First start: open the console (or: docker exec -it claude-in-container tmux new 
   <WebUI/>
   <TemplateURL/>
   <Icon/>
-  <ExtraParams>--user 99:100 --hostname claude-in-container --restart unless-stopped</ExtraParams>
+  <ExtraParams>--user 99:100 --hostname claude-in-container --restart unless-stopped --cap-drop ALL --security-opt no-new-privileges</ExtraParams>
   <PostArgs/>
   <CPUset/>
   <Requires>Image built locally with scripts/build.sh from the project repository.</Requires>

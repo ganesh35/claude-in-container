@@ -1,9 +1,9 @@
 # syntax=docker/dockerfile:1
 # Base: Node 24 LTS, pinned by digest for reproducible builds
 ARG NODE_IMAGE=node:24.21.0-bookworm-slim@sha256:0e0ff40c39bc087845bfb27465a0df4ea419520094bc35842ff83dd8cbe6f9b6
-ARG UV_VERSION=0.12.19
+ARG UV_IMAGE=ghcr.io/astral-sh/uv:0.12.19@sha256:04d046b13e60d6bcec73cbc5e1cad25d680dea90c8573340950a0ac2d1aef424
 
-FROM ghcr.io/astral-sh/uv:${UV_VERSION} AS uv
+FROM ${UV_IMAGE} AS uv
 
 FROM ${NODE_IMAGE}
 ARG CLAUDE_CODE_VERSION=2.1.283
@@ -11,9 +11,11 @@ ARG PLAYWRIGHT_VERSION=1.63.0
 ARG PG_MAJOR=18
 SHELL ["/bin/bash", "-euo", "pipefail", "-c"]
 
-# PGDG repo: Debian's psql 15 can't pg_dump newer servers
+# PGDG repo: Debian's psql 15 can't pg_dump newer servers. The signing key is pinned by fingerprint so a swapped
+# key on the download host fails the build instead of being trusted; grep reads all input (no -q) to avoid SIGPIPE under pipefail
 RUN apt-get update && apt-get install -y --no-install-recommends ca-certificates curl gnupg \
-    && curl -fsSL https://www.postgresql.org/media/keys/ACCC4CF8.asc | gpg --dearmor -o /usr/share/keyrings/pgdg.gpg \
+    && curl -fsSL --proto '=https' --proto-redir '=https' https://www.postgresql.org/media/keys/ACCC4CF8.asc | gpg --dearmor -o /usr/share/keyrings/pgdg.gpg \
+    && gpg --batch --show-keys --with-colons /usr/share/keyrings/pgdg.gpg | grep '^fpr:.*:B97B0AFCAA1A47F044F244A07FCC7D46ACCC4CF8:' >/dev/null \
     && echo "deb [signed-by=/usr/share/keyrings/pgdg.gpg] https://apt.postgresql.org/pub/repos/apt bookworm-pgdg main" > /etc/apt/sources.list.d/pgdg.list \
     && apt-get update && apt-get install -y --no-install-recommends \
       tini tmux git openssh-client less procps ripgrep unzip shellcheck build-essential \

@@ -10,6 +10,9 @@ services:
     hostname: ${CONTAINER_NAME:-claude-in-container}
     restart: unless-stopped
     user: ${PUID:-1000}:${PGID:-1000}
+    # Nothing in the image needs Linux capabilities or setuid escalation; drop both
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
     # Same names as CONTAINER_ENV in scripts/lib.sh; unset ones are not passed
     environment:
       [REMOTE_CONTROL_NAME, ANTHROPIC_API_KEY, CONTINUE, GH_VERSION, YQ_VERSION, JQ_VERSION,
