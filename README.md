@@ -162,6 +162,7 @@ Image-level versions (`NODE_IMAGE`, `UV_IMAGE` — both digest-pinned — `PLAYW
 | `scripts/test.sh` | End-to-end tests on a throwaway copy; see [Testing](#testing) |
 | `scripts/ci.sh` | `lint.sh` then `test.sh` — the CI entrypoint; run it before opening a PR |
 | `scripts/outdated.sh` | Report newer versions of pinned tools, Claude Code, Playwright and the Node base image; read-only |
+| `scripts/publish.sh` | Build and push to GHCR, tagged with the Claude Code version and `latest`; needs `GHCR_TOKEN` (CI only) |
 
 Compose users update with `CLAUDE_CODE_VERSION=<version>` in `.env`, then `docker compose up -d --build`.
 
