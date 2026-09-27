@@ -11,7 +11,8 @@ ROOT=$(cd "$(dirname "$0")/.." && pwd)
 work=$(mktemp -d "${TMPDIR:-/tmp}/cic-test.XXXXXX")
 repo="$work/repo"
 mkdir "$repo" && cp -R "$ROOT/Dockerfile" "$ROOT/start.sh" "$ROOT/install-tools.sh" "$ROOT/scripts" "$ROOT/keys" "$repo/"
-for v in $CONTAINER_ENV CLAUDE_CODE_VERSION CONTAINER_NAME DATA_DIR; do unset "$v"; done
+# GHCR_TOKEN too: with one in the environment (CI), the publish.sh check would really publish instead of refusing
+for v in $CONTAINER_ENV CLAUDE_CODE_VERSION CONTAINER_NAME DATA_DIR GHCR_TOKEN PUBLISH_IMAGE PLATFORMS; do unset "$v"; done
 CONTAINER_ENGINE=$ENGINE IMAGE="claude-in-container:test-$$" PUID=$(id -u) PGID=$(id -g)
 export CONTAINER_ENGINE IMAGE PUID PGID
 prefix="cic-test-$$" created="" failed=0
