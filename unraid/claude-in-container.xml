@@ -1,9 +1,8 @@
 <?xml version="1.0"?>
-<!-- Local image: build it on the server first (scripts/build.sh); Unraid only pulls images that are missing -->
 <Container version="2">
   <Name>claude-in-container</Name>
-  <Repository>claude-in-container:local</Repository>
-  <Registry/>
+  <Repository>ghcr.io/ganesh35/claude-in-container:latest</Repository>
+  <Registry>https://github.com/ganesh35/claude-in-container/pkgs/container/claude-in-container</Registry>
   <Network>bridge</Network>
   <MyIP/>
   <Shell>bash</Shell>
@@ -12,19 +11,19 @@
   <Project>https://github.com/ganesh35/claude-in-container</Project>
   <Overview>Always-on Claude Code in tmux, reachable from phone or browser via Remote Control. Claude sees only the Data folder, which holds your projects and, in .home, its login, settings and runtime-installed tools.&#xD;
 &#xD;
-Before installing: clone the repo and run CONTAINER_ENGINE="sudo docker" scripts/build.sh. The Data folder must be owned by the user in Extra Parameters (default --user 99:100), e.g. mkdir -p DIR &amp;&amp; chown 99:100 DIR.&#xD;
+Before installing: create the Data folder owned by the user in Extra Parameters (default --user 99:100), e.g. mkdir -p DIR &amp;&amp; chown 99:100 DIR. To build the image yourself instead of pulling it, see the project README.&#xD;
 &#xD;
 Tools with a version set below install into the Data folder on first start. Several containers can share one Data folder: give each its own name and set Continue to false on all but one.&#xD;
 &#xD;
 First start: open the console (or: docker exec -it claude-in-container tmux new -A -s main) and log in with your Claude subscription.</Overview>
   <Category>Productivity: Tools:</Category>
   <WebUI/>
-  <TemplateURL/>
-  <Icon/>
+  <TemplateURL>https://raw.githubusercontent.com/ganesh35/claude-in-container/main/unraid/claude-in-container.xml</TemplateURL>
+  <Icon>https://raw.githubusercontent.com/ganesh35/claude-in-container/main/unraid/icon.png</Icon>
   <ExtraParams>--user 99:100 --hostname claude-in-container --restart unless-stopped --cap-drop ALL --security-opt no-new-privileges</ExtraParams>
   <PostArgs/>
   <CPUset/>
-  <Requires>Image built locally with scripts/build.sh from the project repository.</Requires>
+  <Requires/>
   <Config Name="Data" Target="/data" Default="" Mode="rw" Description="The only host folder Claude sees: your projects, plus .home with login, settings and tools. Must be writable by the --user in Extra Parameters" Type="Path" Display="always" Required="true" Mask="false"/>
   <Config Name="Remote Control name" Target="REMOTE_CONTROL_NAME" Default="" Mode="" Description="Session name shown in the Claude app; empty = container hostname" Type="Variable" Display="always" Required="false" Mask="false"/>
   <Config Name="Continue" Target="CONTINUE" Default="true" Mode="" Description="Resume the last conversation on start; false when another container shares this Data folder" Type="Variable" Display="always" Required="false" Mask="false">true</Config>
