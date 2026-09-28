@@ -68,7 +68,7 @@ docker run -d --name claude-in-container --hostname claude-in-container --restar
 ### Unraid
 
 1. Create the data folder owned by the container user: `mkdir -p DIR && chown 99:100 DIR`.
-2. Install from **Apps** (Community Applications) once listed — or copy the template to `/boot/config/plugins/dockerMan/templates-user/my-claude-in-container.xml` and use Docker → Add Container. Set **Data**, adjust `--user` in Extra Parameters to match the folder's owner, and tool versions under *Show more settings*. The template pulls the published image; to run your own build instead, build it on the server and set Repository to its tag.
+2. Install from **Apps** (Community Applications — search for *claude-in-container*) — or copy the template to `/boot/config/plugins/dockerMan/templates-user/my-claude-in-container.xml` and use Docker → Add Container. Set **Data**, adjust `--user` in Extra Parameters to match the folder's owner, and tool versions under *Show more settings*. The template pulls the published image; to run your own build instead, build it on the server and set Repository to its tag.
 3. Open the container console and log in.
 
 ## Data folder
