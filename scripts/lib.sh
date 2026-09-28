@@ -18,7 +18,7 @@ IMAGE="${IMAGE:-claude-in-container:local}"
 CONTAINER_NAME="${CONTAINER_NAME:-claude-in-container}"
 # Variables passed into the container when set (by run.sh; compose.yaml lists the same names)
 # shellcheck disable=SC2034 # used by run.sh
-CONTAINER_ENV="REMOTE_CONTROL_NAME ANTHROPIC_API_KEY CONTINUE GH_VERSION YQ_VERSION JQ_VERSION TERRAFORM_VERSION AWSCLI_VERSION NPM_TOOLS UV_TOOLS"
+CONTAINER_ENV="REMOTE_CONTROL_NAME REMOTE_CONTROL_MODE ANTHROPIC_API_KEY CONTINUE GH_VERSION YQ_VERSION JQ_VERSION TERRAFORM_VERSION AWSCLI_VERSION NPM_TOOLS UV_TOOLS"
 
 # eval splits ENGINE into words in every shell, including zsh (no implicit word splitting)
 engine() { eval "$ENGINE" '"$@"'; }

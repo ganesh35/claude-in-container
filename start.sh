@@ -12,6 +12,15 @@ case ${CONTINUE:-true} in
   *) echo "CONTINUE must be true or false, got '$CONTINUE'" >&2; exit 1 ;;
 esac
 
+# server: one host that starts a new session for each request from the Claude app; session: one named session
+mode=${REMOTE_CONTROL_MODE:-session}
+case $mode in
+  session) ;;
+  # 'remote-control --continue' would resume a single old session and exit, not restart the server
+  server) resume=false ;;
+  *) echo "REMOTE_CONTROL_MODE must be session or server, got '$mode'" >&2; exit 1 ;;
+esac
+
 # A failed checksum or signature check (exit 2) stops the container; any other installer problem is logged and Claude starts anyway
 rc=0
 install-tools.sh || rc=$?
@@ -25,8 +34,13 @@ if [ -z "${ANTHROPIC_API_KEY:-}" ]; then unset ANTHROPIC_API_KEY; fi
 # The session name reaches tmux as an env var, so no quoting of user input into the command string
 if [ -n "${ANTHROPIC_API_KEY:-}" ]; then
   # Remote Control requires a claude.ai subscription login; API-key sessions are terminal-only
+  if [ "$mode" = server ]; then echo "REMOTE_CONTROL_MODE=server needs the subscription login, not ANTHROPIC_API_KEY" >&2; exit 1; fi
   echo "ANTHROPIC_API_KEY set: Remote Control disabled, attach via tmux"
   claude='claude'
+elif [ "$mode" = server ]; then
+  echo "Remote Control server, session name prefix: $name"
+  # shellcheck disable=SC2016 # expanded by tmux's shell, not here
+  claude='claude remote-control --remote-control-session-name-prefix "$RC_NAME"'
 else
   echo "Remote Control session name: $name"
   # shellcheck disable=SC2016 # expanded by tmux's shell, not here

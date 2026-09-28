@@ -150,6 +150,17 @@ engine run -d --name "$name" --user "$PUID:$PGID" -v "$work/apikey:/data" -e ANT
 check "API key disables Remote Control" "claude --continue" "$(claude_args "$name")"
 engine stop -t 10 "$name" >/dev/null || true
 check "clean stop" 0 "$(engine inspect -f '{{.State.ExitCode}}' "$name")"
+name="$prefix-server"; created="$created $name"; mkdir "$work/server"
+engine run -d --name "$name" --user "$PUID:$PGID" -v "$work/server:/data" -e REMOTE_CONTROL_MODE=server -e REMOTE_CONTROL_NAME=e2e "$IMAGE" >/dev/null || true; sleep 10
+check "server mode starts the Remote Control server" yes "$(logged "$name" "Remote Control server, session name prefix: e2e")"
+# Without a login the server exits at once; its error proves 'claude remote-control' ran
+check "server mode ran claude remote-control" yes "$(engine exec "$name" tmux capture-pane -p -t main | grep -F "must be logged in to use Remote Control" >/dev/null && echo yes || echo no)"
+name="$prefix-badmode"; created="$created $name"; mkdir "$work/badmode"
+engine run -d --name "$name" --user "$PUID:$PGID" -v "$work/badmode:/data" -e REMOTE_CONTROL_MODE=bogus "$IMAGE" >/dev/null || true
+check "unknown REMOTE_CONTROL_MODE stops the container" 1 "$(wait_exit "$name")"
+name="$prefix-server-apikey"; created="$created $name"; mkdir "$work/server-apikey"
+engine run -d --name "$name" --user "$PUID:$PGID" -v "$work/server-apikey:/data" -e REMOTE_CONTROL_MODE=server -e ANTHROPIC_API_KEY=e2e-dummy-key "$IMAGE" >/dev/null || true
+check "server mode with an API key stops the container" 1 "$(wait_exit "$name")"
 name="$prefix-readonly"; created="$created $name"; mkdir "$work/readonly"
 engine run -d --name "$name" --user "$PUID:$PGID" -v "$work/readonly:/data:ro" "$IMAGE" >/dev/null || true
 check "unwritable DATA_DIR stops the container" 1 "$(wait_exit "$name")"

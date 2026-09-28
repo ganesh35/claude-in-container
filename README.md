@@ -115,6 +115,8 @@ scripts/attach.sh --name reviewer
 
 With Compose, use a separate project per instance (`CONTAINER_NAME=reviewer CONTINUE=false docker compose -p reviewer up -d`); on Unraid, add the template again under another name.
 
+For several sessions from one container, set `REMOTE_CONTROL_MODE=server`: `claude remote-control` then waits for requests and starts a new session in `/data` each time you create one in the Claude app, named with the `REMOTE_CONTROL_NAME` prefix. Log in first — without a login it exits at once. Sessions end with the container, and `CONTINUE` is ignored.
+
 ## Authentication
 
 | Method | Remote Control | How |
@@ -142,6 +144,7 @@ Claude can use whatever you configure here, so prefer narrowly scoped credential
 | `DATA_DIR` | `./data` | The single host folder mounted at `/data` — see [Data folder](#data-folder) |
 | `PUID` / `PGID` | `1000` | User the container runs as; must own `DATA_DIR` |
 | `REMOTE_CONTROL_NAME` | hostname | Session name in the Claude app |
+| `REMOTE_CONTROL_MODE` | `session` | `server`: start new sessions from the Claude app, named with this prefix — see [Several instances](#several-instances) |
 | `CONTINUE` | `true` | Resume the last conversation on start; `false` on extra instances |
 | `CLAUDE_CODE_VERSION` | pinned in `Dockerfile` | Claude Code version baked in at build |
 | `ANTHROPIC_API_KEY` | — | Optional, replaces the subscription login |
@@ -193,7 +196,7 @@ docker run --rm --privileged --device /dev/fuse -v "$PWD:/repo:ro" -e CONTAINER_
 
 ## Behaviour
 
-- `start.sh` checks `/data` is writable, creates `.home`, runs `install-tools.sh`, then starts `claude --remote-control <name>` in tmux session `main` — with `--continue` (falling back to a fresh session) when `CONTINUE=true`.
+- `start.sh` checks `/data` is writable, creates `.home`, runs `install-tools.sh`, then starts `claude --remote-control <name>` in tmux session `main` — with `--continue` (falling back to a fresh session) when `CONTINUE=true`; with `REMOTE_CONTROL_MODE=server` it starts `claude remote-control --remote-control-session-name-prefix <name>` instead.
 - If Claude exits you land in a shell inside tmux; run `claude --continue --remote-control <name>` or restart the container.
 - The container lives as long as the tmux session; `restart: unless-stopped` brings it back.
 - Healthcheck: *unhealthy* when the tmux session is up but Claude is not running; a 10-minute start period covers first-start tool installs.
