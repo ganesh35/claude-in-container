@@ -1,6 +1,4 @@
 #!/bin/sh
-# CI entrypoint (lint, then the full end-to-end suite). Used by TeamCity; run it yourself before opening a PR.
+# CI entrypoint. Used by TeamCity; run it yourself before opening a PR. test.sh lints first and stops if that fails.
 set -eu
-ROOT=$(cd "$(dirname "$0")/.." && pwd)
-sh "$ROOT/scripts/lint.sh"
-sh "$ROOT/scripts/test.sh"
+exec sh "$(dirname "$0")/test.sh"

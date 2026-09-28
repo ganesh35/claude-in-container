@@ -2,6 +2,8 @@
 # Installs tools pinned in the environment into $HOME/.local, skipping any already at that version.
 # Download or install errors are logged and skipped; a failed checksum or signature check exits 2 so the container stops.
 set -eu
+# Fixed PATH: /data/.home/.local/bin comes first in the image and is user-writable, so nothing there may shadow the tools that verify downloads
+PATH=/usr/local/bin:/usr/bin:/bin
 prefix="$HOME/.local" state="$HOME/.local/share/cic-tools" lock="$HOME/.local/.install-tools.lock"
 export UV_TOOL_DIR="$prefix/share/uv/tools" UV_TOOL_BIN_DIR="$prefix/bin"
 mkdir -p "$prefix/bin" "$state"
@@ -13,7 +15,8 @@ esac
 
 log() { echo "tools: $*"; }
 # HTTPS only, including redirects: a redirect to plain http would otherwise be followed
-fetch() { curl -fsSL --proto '=https' --proto-redir '=https' --retry 3 -o "$2" "$1"; }
+# Timeouts: a stalled download would otherwise hold the install lock indefinitely
+fetch() { curl -fsSL --proto '=https' --proto-redir '=https' --retry 3 --connect-timeout 30 --speed-limit 1000 --speed-time 60 --max-time 900 -o "$2" "$1"; }
 # Fails on a missing or wrong checksum; callers map that to exit 2
 sha_ok() { [ -n "$2" ] && [ "$(sha256sum "$1" | cut -d' ' -f1)" = "$2" ]; }
 # AWS CLI signing key from the AWS CLI install guide; it expires 2027-07-01, then refresh keys/aws-cli.asc from the guide
@@ -58,7 +61,7 @@ install_aws() {
   unzip -q aws.zip || return 1
   ./aws/install --install-dir "$prefix/aws-cli" --bin-dir "$prefix/bin" --update
 }
-install_npm() { npm install -g --prefix "$prefix" "$1"; }
+install_npm() { npm install -g "$1"; } # NPM_CONFIG_PREFIX in the image points at $prefix
 install_uv() { uv tool install --force "$1"; }
 
 run() { # key wanted-version binary-or-empty installer [args...]
@@ -93,16 +96,18 @@ run terraform "${TERRAFORM_VERSION:-}" terraform install_terraform
 run aws "${AWSCLI_VERSION:-}" aws install_aws
 
 set -f # lists are split on spaces, never globbed
+# Exact versions only: ranges, tags and git/file/URL specs would resolve to a moving target while the state file says
+# "up to date". npm needs all three parts (it reads 'pnpm@12' as a range); pip's == is exact for any digits-and-dots version.
+# Scoped npm names start with @, so the version is what follows the last @.
+exact() { case $1 in ''|*[!0-9.]*) return 1 ;; esac; }
+exact_npm() { case $1 in [0-9]*.[0-9]*.[0-9]*) exact "$1" ;; *) return 1 ;; esac; }
 for spec in ${NPM_TOOLS:-}; do
-  # name@version with a numeric version, so a git/file/URL spec can't slip in; scoped names start with @
-  case $spec in
-    ?*@[0-9]*) run "npm-$(printf '%s' "${spec%@*}" | tr '/@' '__')" "$spec" "" install_npm "$spec" ;;
-    *) log "npm $spec FAILED: pin a version as name@version" ;;
-  esac
+  if [ "${spec%@*}" != "$spec" ] && exact_npm "${spec##*@}"; then
+    run "npm-$(printf '%s' "${spec%@*}" | tr '/@' '__')" "$spec" "" install_npm
+  else log "npm $spec FAILED: pin an exact version as name@x.y.z"; fi
 done
 for spec in ${UV_TOOLS:-}; do
-  case $spec in
-    ?*==[0-9]*) run "uv-${spec%%==*}" "$spec" "" install_uv "$spec" ;;
-    *) log "uv $spec FAILED: pin a version as name==version" ;;
-  esac
+  if [ "${spec%%==*}" != "$spec" ] && exact "${spec##*==}"; then
+    run "uv-${spec%%==*}" "$spec" "" install_uv
+  else log "uv $spec FAILED: pin an exact version as name==x.y.z"; fi
 done

@@ -21,9 +21,14 @@ case $mode in
   *) echo "REMOTE_CONTROL_MODE must be session or server, got '$mode'" >&2; exit 1 ;;
 esac
 
-# A failed checksum or signature check (exit 2) stops the container; any other installer problem is logged and Claude starts anyway
+# A failed checksum or signature check (exit 2) stops the container; any other installer problem is logged and Claude starts anyway.
+# On a stop during the install, forward the signal and wait: if this shell died first, PID 1 would exit and the kernel
+# would SIGKILL the installer before it could release its lock
 rc=0
-install-tools.sh || rc=$?
+/usr/local/bin/install-tools.sh & ipid=$!
+trap 'kill -TERM "$ipid" 2>/dev/null; wait "$ipid" 2>/dev/null; exit 0' TERM INT
+wait "$ipid" || rc=$?
+trap - TERM INT
 if [ "$rc" -eq 2 ]; then exit 2; fi
 if [ "$rc" -ne 0 ]; then echo "tools: installer exited $rc, starting Claude without all tools" >&2; fi
 
@@ -54,7 +59,7 @@ echo "Claude started in tmux session 'main'"
 
 # Stay alive while the session exists; exit lets the restart policy start a fresh one
 trap 'tmux kill-server 2>/dev/null; exit 0' TERM INT
-while tmux has-session -t main 2>/dev/null; do
+while tmux has-session -t =main 2>/dev/null; do
   sleep 5 & wait $!
 done
 echo "tmux session 'main' ended"
