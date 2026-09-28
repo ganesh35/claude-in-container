@@ -117,6 +117,21 @@ With Compose, use a separate project per instance (`CONTAINER_NAME=reviewer CONT
 
 For several sessions from one container, set `REMOTE_CONTROL_MODE=server`: `claude remote-control` then waits for requests and starts a new session in `/data` each time you create one in the Claude app, named with the `REMOTE_CONTROL_NAME` prefix. Log in first — without a login it exits at once. Sessions end with the container, and `CONTINUE` is ignored.
 
+## Routines
+
+Scheduled headless runs inside the container, with access to everything it can see. Create `/data/routines` (`DATA_DIR/routines` on the host) as a crontab, then restart the container once; later edits are picked up automatically:
+
+```
+# min hour dom mon dow  command
+0 8 * * 1-5  routine Summarise new files in /data/family/Scan since yesterday into /data/reports/scan.md
+0 * * * *    echo "any shell command works too" >> /data/hourly.log
+```
+
+- `routine <prompt>` runs `claude -p --permission-mode auto` in `/data` with the container's login and saves the reply to `/data/routines-output/<UTC time>-<first words>.md`; each run logs one line (`routine: ok|failed -> file`) to the container log.
+- The schedule uses [supercronic](https://github.com/aptible/supercronic) syntax (standard cron, plus an optional leading seconds field); an invalid file is logged and skipped, and Claude starts regardless.
+- Runs draw on the same Claude usage as interactive sessions, and a run that is still going when the next one is due is skipped.
+- Claude Code's own [routines](https://code.claude.com/docs/en/routines) run in Anthropic's cloud against a GitHub checkout and can't see this container; routing them to your own hardware needs a Team or Enterprise plan ([self-hosted environments](https://code.claude.com/docs/en/self-hosted-environments)). These routines are the in-container equivalent.
+
 ## Authentication
 
 | Method | Remote Control | How |

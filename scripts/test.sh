@@ -9,7 +9,7 @@ ROOT=$(cd "$(dirname "$0")/.." && pwd)
 # Everything runs from a copy without .env, so a user's CONTAINER_NAME or GHCR_TOKEN can never reach a real container or GHCR
 work=$(mktemp -d "${TMPDIR:-/tmp}/cic-test.XXXXXX")
 repo="$work/repo"
-mkdir "$repo" && cp -R "$ROOT/Dockerfile" "$ROOT/start.sh" "$ROOT/install-tools.sh" "$ROOT/.env.example" "$ROOT/compose.yaml" \
+mkdir "$repo" && cp -R "$ROOT/Dockerfile" "$ROOT/start.sh" "$ROOT/install-tools.sh" "$ROOT/routine.sh" "$ROOT/.env.example" "$ROOT/compose.yaml" \
   "$ROOT/scripts" "$ROOT/keys" "$ROOT/unraid" "$repo/"
 for v in $CONTAINER_ENV CLAUDE_CODE_VERSION CONTAINER_NAME DATA_DIR GHCR_TOKEN PUBLISH_IMAGE PLATFORMS; do unset "$v"; done
 CONTAINER_ENGINE=$ENGINE IMAGE="claude-in-container:test-$$" PUID=$(id -u) PGID=$(id -g)
@@ -186,6 +186,26 @@ raw server-apikey -e REMOTE_CONTROL_MODE=server -e ANTHROPIC_API_KEY=e2e-dummy-k
 check "server mode with an API key stops the container" 1 "$(wait_exit "$name")"
 raw readonly --ro
 check "unwritable DATA_DIR stops the container" 1 "$(wait_exit "$name")"
+
+echo "== routines"
+check "no routines file, no scheduler" 1 "$(rc engine exec "$prefix-server" pgrep -x supercronic)"
+mkdir -p "$work/routines"
+# 7-field expressions (seconds first) fire every 5 s, so the suite needn't wait for a minute boundary
+printf '%s\n' '*/5 * * * * * * echo e2e-routine-ran > /data/routine-proof' '*/5 * * * * * * routine say e2e hello' > "$work/routines/routines"
+raw routines
+wait_until "$name" test -f /data/routine-proof
+check "routine schedule fires" 0 "$(rc engine exec "$name" test -f /data/routine-proof)"
+wait_until "$name" sh -c "ls /data/routines-output/*say-e2e-hello.md"
+check "routine helper saves the run" 0 "$(rc engine exec "$name" sh -c "ls /data/routines-output/*say-e2e-hello.md")"
+# The summary line comes when claude -p finishes, a moment after the output file appears
+i=0; until [ "$(logged "$name" "routine: ")" = yes ] || [ $i -ge 15 ]; do i=$((i + 1)); sleep 2; done
+check "routine run is logged" yes "$(logged "$name" "routine: ")"
+check "claude still runs alongside routines" 0 "$(rc engine exec "$name" pgrep -x claude)"
+mkdir -p "$work/badroutines"; echo "not a cron line" > "$work/badroutines/routines"
+raw badroutines
+wait_until "$name" pgrep -x claude
+check "invalid routines file is logged" yes "$(logged "$name" "routines disabled")"
+check "claude starts despite an invalid routines file" 0 "$(rc engine exec "$name" pgrep -x claude)"
 
 echo "== shells tested:${tested:- none}"
 if [ "$failed" -eq 0 ]; then echo "All tests passed"; else echo "$failed test(s) failed"; exit 1; fi
