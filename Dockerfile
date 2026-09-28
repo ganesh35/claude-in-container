@@ -48,9 +48,10 @@ WORKDIR /data
 COPY --chmod=755 start.sh install-tools.sh /usr/local/bin/
 COPY --chmod=444 keys/aws-cli.asc /usr/local/share/claude-in-container/aws-cli.asc
 # Unhealthy when Claude exited and only the fallback shell remains; the long start period covers first-start tool installs.
-# Absolute paths: /data/.home/.local/bin is first on PATH and user-writable
+# Absolute paths: /data/.home/.local/bin is first on PATH and user-writable. After the first-run login Claude re-launches
+# itself as claude.exe, so both process names count
 HEALTHCHECK --interval=30s --timeout=5s --start-period=10m --retries=3 \
-  CMD ["/bin/sh", "-c", "/usr/bin/tmux has-session -t =main 2>/dev/null && /usr/bin/pgrep -x claude >/dev/null"]
+  CMD ["/bin/sh", "-c", "/usr/bin/tmux has-session -t =main 2>/dev/null && /usr/bin/pgrep -x 'claude(\\.exe)?' >/dev/null"]
 # tini reaps zombies and forwards signals to the whole group (-g), so a stop during a tool install reaches the installer
 # and it releases its lock; tmux runs in its own session and is stopped by start.sh's trap instead
 ENTRYPOINT ["/usr/bin/tini", "-g", "--"]
