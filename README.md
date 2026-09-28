@@ -26,7 +26,7 @@ Always-on [Claude Code](https://docs.claude.com/en/docs/claude-code) in a contai
 - **Clean host:** no global npm, pip or Terraform installs on your machine.
 
 **Portable and easy to operate**
-- **Runs anywhere:** Docker, Podman (rootless too), Compose or Unraid, on amd64 and arm64; scripts work in any POSIX shell.
+- **Runs anywhere:** Docker, Podman (rootless too), Compose or Unraid, on amd64 and arm64 (the published image is amd64; build locally for arm64); scripts work in any POSIX shell.
 - **Movable setup:** projects, login, settings, history and tools live in one folder — copy it to move to another host.
 - **Several instances on one folder:** containers share projects, login and tools; each has its own name and session.
 - **Resource caps:** limit CPU and memory with your engine's standard flags.
@@ -54,14 +54,14 @@ Detach with `Ctrl-b d` — Claude keeps running. Open the Claude app → Code, o
 
 | Method | Command | Notes |
 |---|---|---|
-| Docker Compose | `mkdir -p data && docker compose up -d --build` | Reads `.env`; on Docker, fails fast if the data folder is missing (it would create it root-owned); Podman creates it owned by you |
+| Docker Compose | `mkdir -p data && docker compose up -d --build` | Reads `.env`; on Docker, fails fast if the data folder is missing (it would create it root-owned); Podman creates it owned by you. With `IMAGE=ghcr.io/…` use `up -d --no-build` (pulls; `--build` would tag a local build as that name) |
 | Plain docker | see below | |
 | Podman (rootless) | `scripts/run.sh` | Adds `--userns keep-id` so files keep your host owner; Compose can't express this portably. All registry images are fully qualified, so Podman's short-name enforcement is never triggered |
 | Unraid | [`unraid/claude-in-container.xml`](unraid/claude-in-container.xml) | See [Unraid](#unraid) |
 
 ```bash
 docker run -d --name claude-in-container --hostname claude-in-container --restart unless-stopped \
-  --user 1000:1000 -v "$PWD/data:/data" \
+  --user 1000:1000 --cap-drop ALL --security-opt no-new-privileges -v "$PWD/data:/data" \
   -e REMOTE_CONTROL_NAME=my-box -e GH_VERSION=2.101.0 -e JQ_VERSION=1.8.2 claude-in-container:local
 ```
 
@@ -105,7 +105,7 @@ An empty value installs nothing. A failed download or install is logged and Clau
 
 ### Several instances
 
-Containers can share one `DATA_DIR`: they see the same projects, login and tools, and a lock lets only one install tools at a time. Give each its own name, and set `CONTINUE=false` on all but one — `claude --continue` resumes the latest conversation in `/data`, so instances would otherwise resume the same one.
+Containers can share one `DATA_DIR`: they see the same projects, login and tools, and a lock lets only one install tools at a time. Keep the tool versions identical across them — different pins on one folder reinstall back and forth on every start. Give each its own name, and set `CONTINUE=false` on all but one — `claude --continue` resumes the latest conversation in `/data`, so instances would otherwise resume the same one.
 
 ```sh
 scripts/run.sh                                      # main instance, resumes
@@ -151,6 +151,7 @@ Claude can use whatever you configure here, so prefer narrowly scoped credential
 | `GH_VERSION` … `UV_TOOLS` | see `.env.example` | Tools installed on start — see [Tools](#tools) |
 | `CONTAINER_ENGINE` | auto (docker, then podman) | e.g. `sudo docker` where docker needs root |
 | `IMAGE` / `CONTAINER_NAME` | `claude-in-container:local` / `claude-in-container` | |
+| `TEST_SHELLS`, `PLATFORMS`, `PUBLISH_IMAGE`, `GHCR_TOKEN` | see `.env.example` | Maintainer-only: test matrix and publishing; never passed to the container |
 
 Image-level versions (`NODE_IMAGE`, `UV_IMAGE` — both digest-pinned — `PLAYWRIGHT_VERSION`, `PG_MAJOR`) are build args in the [`Dockerfile`](Dockerfile); override with `scripts/build.sh --build-arg NAME=VALUE`.
 
@@ -197,7 +198,7 @@ docker run --rm --privileged --device /dev/fuse -v "$PWD:/repo:ro" -e CONTAINER_
 ## Behaviour
 
 - `start.sh` checks `/data` is writable, creates `.home`, runs `install-tools.sh`, then starts `claude --remote-control <name>` in tmux session `main` — with `--continue` (falling back to a fresh session) when `CONTINUE=true`; with `REMOTE_CONTROL_MODE=server` it starts `claude remote-control --remote-control-session-name-prefix <name>` instead.
-- If Claude exits you land in a shell inside tmux; run `claude --continue --remote-control <name>` or restart the container.
+- If Claude exits you land in a shell inside tmux; restart the container to get it back.
 - The container lives as long as the tmux session; `restart: unless-stopped` brings it back.
 - Healthcheck: *unhealthy* when the tmux session is up but Claude is not running; a 10-minute start period covers first-start tool installs.
 - The Remote Control session URL changes on every restart; the app lists it under the same name.
@@ -208,7 +209,7 @@ docker run --rm --privileged --device /dev/fuse -v "$PWD:/repo:ro" -e CONTAINER_
 - `DATA_DIR/.home` holds your logins; anyone who can read the folder (for example over a network share) can read them.
 - No ports are exposed; Remote Control connects outbound to claude.ai.
 - The container runs with every Linux capability dropped and `no-new-privileges`; nothing in the image needs either.
-- Every download is HTTPS-only (redirects to plain HTTP are refused) and verified by checksum or signature; helper images are pinned by digest.
+- Release binaries are fetched HTTPS-only (redirects to plain HTTP are refused) and verified by checksum or signature; base and helper images are pinned by digest. Packages from npm, PyPI and apt rely on those registries' own integrity checks.
 - The auto-updater is disabled; updates happen only by rebuilding.
 - Keep `.env` out of git (already ignored).
 

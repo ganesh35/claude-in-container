@@ -6,16 +6,18 @@ ROOT=$(cd "$(dirname "$0")/.." && pwd)
 # shellcheck source=scripts/lib.sh
 . "$ROOT/scripts/lib.sh"
 
-# Setup steps end in || true so only checks fail a run; a failed setup shows up in the checks after it
-# Work on a copy without .env, so a user's CONTAINER_NAME can never point tests at a real container
+# Everything runs from a copy without .env, so a user's CONTAINER_NAME or GHCR_TOKEN can never reach a real container or GHCR
 work=$(mktemp -d "${TMPDIR:-/tmp}/cic-test.XXXXXX")
 repo="$work/repo"
-mkdir "$repo" && cp -R "$ROOT/Dockerfile" "$ROOT/start.sh" "$ROOT/install-tools.sh" "$ROOT/scripts" "$ROOT/keys" "$repo/"
-# GHCR_TOKEN too: with one in the environment (CI), the publish.sh check would really publish instead of refusing
+mkdir "$repo" && cp -R "$ROOT/Dockerfile" "$ROOT/start.sh" "$ROOT/install-tools.sh" "$ROOT/.env.example" "$ROOT/compose.yaml" \
+  "$ROOT/scripts" "$ROOT/keys" "$ROOT/unraid" "$repo/"
 for v in $CONTAINER_ENV CLAUDE_CODE_VERSION CONTAINER_NAME DATA_DIR GHCR_TOKEN PUBLISH_IMAGE PLATFORMS; do unset "$v"; done
 CONTAINER_ENGINE=$ENGINE IMAGE="claude-in-container:test-$$" PUID=$(id -u) PGID=$(id -g)
 export CONTAINER_ENGINE IMAGE PUID PGID
 prefix="cic-test-$$" created="" failed=0
+pin() { sed -n "s/^$1=//p" "$repo/.env.example" | tr -d '"'; }
+JQ=$(pin JQ_VERSION) YQ=$(pin YQ_VERSION) AWS=$(pin AWSCLI_VERSION)
+JQ_OLD=1.8.1 # any released jq older than the pin, to exercise a version change
 
 # Removes only what this run created
 cleanup() {
@@ -30,55 +32,67 @@ check() { # description expected actual
   if [ "$2" = "$3" ]; then echo "  PASS $1"; else echo "  FAIL $1 (expected '$2', got '$3')"; failed=$((failed + 1)); fi
 }
 rc() { "$@" >/dev/null 2>&1 && echo 0 || echo $?; }
+# grep reads all input (no -q): an early exit would SIGPIPE the producer and fail under pipefail
+has() { grep -F "$1" >/dev/null && echo yes || echo no; }
+logged() { engine logs "$1" 2>&1 | has "$2"; }
+claude_args() { engine exec "$1" pgrep -xa claude | cut -d' ' -f2-; }
+has_arg() { # container arg: yes if the claude process got arg as one argument
+  # shellcheck disable=SC2016 # expands inside the container
+  engine exec "$1" sh -c 'tr "\0" "\n" < /proc/$(pgrep -x claude)/cmdline' | grep -Fx "$2" >/dev/null && echo yes || echo no
+}
 use() { # container data-dir: points run.sh at it
   CONTAINER_NAME=$1 DATA_DIR=$2
   export CONTAINER_NAME DATA_DIR
   created="$created $1"
 }
-wait_healthy() {
+raw() { # label [--ro] [engine run args...]: a container started directly, with its own data dir under $work/label
+  name="$prefix-$1"; created="$created $name"; mkdir -p "$work/$1"; mount="$work/$1:/data"; shift
+  if [ "${1:-}" = --ro ]; then mount="$mount:ro"; shift; fi
+  engine run -d --name "$name" --user "$PUID:$PGID" -v "$mount" "$@" "$IMAGE" >/dev/null || true
+}
+wait_healthy() { # stops early once the container is gone or has exited
   i=0
   while [ $i -lt 40 ]; do
-    s=$(engine inspect -f '{{.State.Health.Status}}' "$1" 2>/dev/null || echo missing)
-    [ "$s" = healthy ] && break
+    s=$(engine inspect -f '{{.State.Running}} {{.State.Health.Status}}' "$1" 2>/dev/null || echo "false missing")
+    case $s in "true healthy") s=healthy; break ;; "false "*) s="exited (${s#false })"; break ;; esac
     i=$((i + 1)); sleep 5
   done
-  echo "$s"
+  echo "${s#true }"
 }
 wait_exit() { # echoes the exit code once the container stops
   i=0
   while [ "$(engine inspect -f '{{.State.Running}}' "$1")" = true ] && [ $i -lt 30 ]; do i=$((i + 1)); sleep 2; done
   engine inspect -f '{{.State.ExitCode}}' "$1"
 }
-# grep reads all input (no -q): an early exit would SIGPIPE the producer and fail under pipefail
-logged() { engine logs "$1" 2>&1 | grep -F "$2" >/dev/null && echo yes || echo no; }
-claude_args() { engine exec "$1" pgrep -xa claude | cut -d' ' -f2-; }
-has_arg() { # container arg: yes if the claude process got arg as one argument
-  # shellcheck disable=SC2016 # expands inside the container
-  engine exec "$1" sh -c 'tr "\0" "\n" < /proc/$(pgrep -x claude)/cmdline' | grep -Fx "$2" >/dev/null && echo yes || echo no
+wait_until() { # container test-command...: polls up to 30 s
+  c=$1; shift; i=0
+  until engine exec "$c" "$@" >/dev/null 2>&1 || [ $i -ge 15 ]; do i=$((i + 1)); sleep 2; done
 }
 
 echo "== lint"
-check "publish.sh refuses to run without a token" 1 "$(rc sh "$ROOT/scripts/publish.sh")"
-check lint.sh 0 "$(rc sh "$ROOT/scripts/lint.sh")"
+check "publish.sh refuses to run without a token" 1 "$(rc sh "$repo/scripts/publish.sh")"
+if out=$(sh "$repo/scripts/lint.sh" 2>&1); then echo "  PASS lint.sh"; else echo "  FAIL lint.sh"; echo "$out" | tail -20; exit 1; fi
 echo "== build"
-check build.sh 0 "$(rc sh "$repo/scripts/build.sh")"
+if out=$(sh "$repo/scripts/build.sh" 2>&1); then echo "  PASS build.sh"; else echo "  FAIL build.sh"; echo "$out" | tail -20; exit 1; fi
 
 tested=""
-for sh in ${TEST_SHELLS:-dash ash bash zsh}; do
-  command -v "$sh" >/dev/null || { echo "== $sh: SKIP (not installed)"; continue; }
-  echo "== $sh"; tested="$tested $sh"
-  name="$prefix-$sh"; use "$name" "$work/$sh"
-  REMOTE_CONTROL_NAME="e2e $sh it's"; export REMOTE_CONTROL_NAME
-  check run.sh 0 "$(rc "$sh" "$repo/scripts/run.sh")"
-  check "run.sh refuses an existing container" 1 "$(rc "$sh" "$repo/scripts/run.sh")"
-  check "run.sh --replace" 0 "$(rc "$sh" "$repo/scripts/run.sh" --replace)"
+for shell in ${TEST_SHELLS:-dash ash bash zsh}; do
+  command -v "$shell" >/dev/null || { echo "== $shell: SKIP (not installed)"; continue; }
+  echo "== $shell"; tested="$tested $shell"
+  name="$prefix-$shell"; use "$name" "$work/$shell"
+  REMOTE_CONTROL_NAME="e2e $shell it's"; export REMOTE_CONTROL_NAME
+  check run.sh 0 "$(rc "$shell" "$repo/scripts/run.sh")"
+  check "run.sh refuses an existing container" 1 "$(rc "$shell" "$repo/scripts/run.sh")"
+  check "run.sh --replace" 0 "$(rc "$shell" "$repo/scripts/run.sh" --replace)"
+  check "run.sh rejects an unknown option" 1 "$(rc "$shell" "$repo/scripts/run.sh" --bogus)"
   check healthy healthy "$(wait_healthy "$name")"
   check "session name arrives as one argument" yes "$(has_arg "$name" "$REMOTE_CONTROL_NAME")"
   engine exec "$name" touch /data/e2e-file || true
   # shellcheck disable=SC2012 # single known filename
   check "data files owned by PUID" "$PUID" "$(ls -ln "$DATA_DIR/e2e-file" | awk '{print $3}')"
-  echo "CLAUDE_CODE_VERSION=$(engine exec "$name" claude --version | cut -d' ' -f1)" > "$repo/.env"
-  check "update.sh is a no-op when current" "Already on" "$("$sh" "$repo/scripts/update.sh" 2>&1 | tail -1 | cut -c1-10)"
+  current=$(engine exec "$name" claude --version | cut -d' ' -f1)
+  echo "CLAUDE_CODE_VERSION=$current" > "$repo/.env"
+  check "update.sh is a no-op when current" "Already on" "$("$shell" "$repo/scripts/update.sh" "$current" 2>&1 | tail -1 | cut -c1-10)"
   rm "$repo/.env"
 done
 unset REMOTE_CONTROL_NAME
@@ -86,46 +100,51 @@ unset REMOTE_CONTROL_NAME
 echo "== instances sharing one DATA_DIR"
 shared="$work/shared" main="$prefix-main" second="$prefix-second"
 use "$main" "$shared"; created="$created $second"
-JQ_VERSION=1.8.2 sh "$repo/scripts/run.sh" >/dev/null || true
+JQ_VERSION=$JQ sh "$repo/scripts/run.sh" >/dev/null || true
 check "main: healthy" healthy "$(wait_healthy "$main")"
-check "main: jq installed when missing" yes "$(logged "$main" "jq 1.8.2 installed")"
+check "main: jq installed when missing" yes "$(logged "$main" "jq $JQ installed")"
 check "main: resumes (CONTINUE default)" "claude --remote-control $main --continue" "$(claude_args "$main")"
 engine exec "$main" touch /data/.home/e2e-shared || true
-CONTINUE=false JQ_VERSION=1.8.2 sh "$repo/scripts/run.sh" --name "$second" >/dev/null || true
+CONTINUE=false JQ_VERSION=$JQ sh "$repo/scripts/run.sh" --name "$second" >/dev/null || true
 check "second: healthy" healthy "$(wait_healthy "$second")"
-check "second: jq skipped when current" yes "$(logged "$second" "jq 1.8.2 up to date")"
+check "second: jq skipped when current" yes "$(logged "$second" "jq $JQ up to date")"
 check "second: starts fresh (CONTINUE=false)" "claude --remote-control $second" "$(claude_args "$second")"
 check "second: shares the login folder" 0 "$(rc engine exec "$second" test -f /data/.home/e2e-shared)"
-check "second: uses the shared jq" jq-1.8.2 "$(engine exec "$second" jq --version)"
+check "second: uses the shared jq" "jq-$JQ" "$(engine exec "$second" jq --version)"
 
 echo "== tool installs"
-JQ_VERSION=1.8.1 TERRAFORM_VERSION=0.0.0-e2e AWSCLI_VERSION=2.37.4 sh "$repo/scripts/run.sh" --replace >/dev/null || true
+JQ_VERSION=$JQ_OLD TERRAFORM_VERSION=0.0.0-e2e AWSCLI_VERSION=$AWS sh "$repo/scripts/run.sh" --replace >/dev/null || true
 check "healthy despite a failed install" healthy "$(wait_healthy "$main")"
-check "jq reinstalled on version change" jq-1.8.1 "$(engine exec "$main" jq --version)"
+check "jq reinstalled on version change" "jq-$JQ_OLD" "$(engine exec "$main" jq --version)"
 check "failed install is logged" yes "$(logged "$main" "terraform 0.0.0-e2e FAILED, continuing")"
-check "AWS CLI installed after signature check" yes "$(logged "$main" "aws 2.37.4 installed")"
+check "AWS CLI installed after signature check" yes "$(logged "$main" "aws $AWS installed")"
 # exec re-runs the installer in the live container with extra vars; existing tools just report up to date
-check "npm tool with a numeric version installs" yes "$(engine exec -e NPM_TOOLS=cowsay@1.6.0 "$main" install-tools.sh 2>&1 | grep -F "cowsay@1.6.0 installed" >/dev/null && echo yes || echo no)"
-check "npm spec without a numeric version is rejected" yes "$(engine exec -e NPM_TOOLS=e2e-bad@git+https://example.com/x.git "$main" install-tools.sh 2>&1 | grep -F "e2e-bad@git+https://example.com/x.git FAILED: pin a version" >/dev/null && echo yes || echo no)"
-# Test-only curl that corrupts downloads matching FAKE_CORRUPT, reached via PATH
-mkdir "$work/fakebin"
-cat > "$work/fakebin/curl" <<'FAKE'
+check "npm tool with an exact version installs" yes "$(engine exec -e NPM_TOOLS=cowsay@1.6.0 "$main" install-tools.sh 2>&1 | has "cowsay@1.6.0 installed")"
+check "npm git spec is rejected" yes "$(engine exec -e NPM_TOOLS=e2e-bad@git+https://example.com/x.git "$main" install-tools.sh 2>&1 | has "FAILED: pin an exact version")"
+check "npm range spec is rejected" yes "$(engine exec -e NPM_TOOLS=pnpm@12 "$main" install-tools.sh 2>&1 | has "pnpm@12 FAILED: pin an exact version")"
+check "uv range spec is rejected" yes "$(engine exec -e "UV_TOOLS=ruff==0.9.*" "$main" install-tools.sh 2>&1 | has "FAILED: pin an exact version")"
+# Test-only curl that corrupts downloads matching FAKE_CORRUPT; mounted where the installer's fixed PATH finds it first
+cat > "$work/fakecurl" <<'FAKE'
 #!/bin/sh
 /usr/bin/curl "$@"; rc=$?; out=""
 while [ $# -gt 0 ]; do [ "$1" = -o ] && out=$2; shift; done
 case $out in $FAKE_CORRUPT) printf x >> "$out" ;; esac
 exit $rc
 FAKE
-chmod +x "$work/fakebin/curl"
+chmod +x "$work/fakecurl"
 corrupt() { # label env-assignment file-pattern: container must stop with exit 2 and log the failure
-  name="$prefix-$1"; created="$created $name"; mkdir "$work/$1"
-  engine run -d --name "$name" --user "$PUID:$PGID" -v "$work/$1:/data" -v "$work/fakebin:/fakebin:ro" -e "FAKE_CORRUPT=$3" \
-    -e PATH=/fakebin:/data/.home/.local/bin:/usr/local/bin:/usr/bin:/bin -e "$2" "$IMAGE" >/dev/null || true
+  raw "$1" -v "$work/fakecurl:/usr/local/bin/curl:ro" -e "FAKE_CORRUPT=$3" -e "$2"
   check "$1 stops the container" 2 "$(wait_exit "$name")"
   check "$1 is logged" yes "$(logged "$name" "VERIFICATION FAILED")"
 }
-corrupt checksum-mismatch YQ_VERSION=4.53.6 'yq_linux_*'
-corrupt bad-signature AWSCLI_VERSION=2.37.4 aws.zip
+corrupt checksum-mismatch "YQ_VERSION=$YQ" 'yq_linux_*'
+corrupt bad-signature "AWSCLI_VERSION=$AWS" aws.zip
+# A stop during a first-start install must release the lock, or the next start waits behind it
+raw stop-install -e "AWSCLI_VERSION=$AWS"
+lock="$work/stop-install/.home/.local/.install-tools.lock"
+i=0; until [ -d "$lock" ] || [ $i -ge 30 ]; do i=$((i + 1)); sleep 1; done
+engine stop -t 10 "$name" >/dev/null || true
+check "stop during install releases the lock" no "$(test -d "$lock" && echo yes || echo no)"
 
 echo "== behaviour"
 name="$prefix-behaviour"; use "$name" "$work/behaviour"
@@ -137,32 +156,35 @@ check "all capabilities dropped" 0000000000000000 "$(engine exec "$name" sh -c "
 check "no-new-privileges set" 1 "$(engine exec "$name" sh -c "grep ^NoNewPrivs /proc/self/status | cut -f2")"
 hc=$(engine inspect -f '{{index .Config.Healthcheck.Test 3}}' "$name")
 check "healthcheck passes while claude runs" 0 "$(rc engine exec "$name" sh -c "$hc")"
-# Twice: start.sh falls back from 'claude --continue' to a fresh 'claude'
-engine exec "$name" pkill -x claude || true; sleep 3
-engine exec "$name" pkill -x claude || true; sleep 3
+# Twice: start.sh falls back from 'claude --continue' to a fresh 'claude'; wait for each state rather than sleeping
+first=$(engine exec "$name" pgrep -x claude || true)
+engine exec "$name" pkill -x claude || true
+wait_until "$name" sh -c "p=\$(pgrep -x claude) && [ \"\$p\" != '$first' ]"
+engine exec "$name" pkill -x claude || true
+wait_until "$name" sh -c "! pgrep -x claude"
 check "healthcheck fails once claude exits" 1 "$(rc engine exec "$name" sh -c "$hc")"
-check "tmux session survives in the fallback shell" 0 "$(rc engine exec "$name" tmux has-session -t main)"
-engine exec "$name" tmux kill-session -t main || true; sleep 8
+check "tmux session survives in the fallback shell" 0 "$(rc engine exec "$name" tmux has-session -t =main)"
+engine exec "$name" tmux kill-session -t =main || true
+i=0; while [ "$(engine inspect -f '{{.State.Running}}' "$name")" = true ] && [ $i -lt 10 ]; do i=$((i + 1)); sleep 2; done
 check "start.sh ends with the tmux session" yes "$(logged "$name" "session 'main' ended")"
 
-name="$prefix-apikey"; created="$created $name"; mkdir "$work/apikey"
-engine run -d --name "$name" --user "$PUID:$PGID" -v "$work/apikey:/data" -e ANTHROPIC_API_KEY=e2e-dummy-key "$IMAGE" >/dev/null || true; sleep 10
+raw apikey -e ANTHROPIC_API_KEY=e2e-dummy-key
+wait_until "$name" pgrep -x claude
 check "API key disables Remote Control" "claude --continue" "$(claude_args "$name")"
 engine stop -t 10 "$name" >/dev/null || true
 check "clean stop" 0 "$(engine inspect -f '{{.State.ExitCode}}' "$name")"
-name="$prefix-server"; created="$created $name"; mkdir "$work/server"
-engine run -d --name "$name" --user "$PUID:$PGID" -v "$work/server:/data" -e REMOTE_CONTROL_MODE=server -e REMOTE_CONTROL_NAME=e2e "$IMAGE" >/dev/null || true; sleep 10
+raw server -e REMOTE_CONTROL_MODE=server -e REMOTE_CONTROL_NAME=e2e
 check "server mode starts the Remote Control server" yes "$(logged "$name" "Remote Control server, session name prefix: e2e")"
 # Without a login the server exits at once; its error proves 'claude remote-control' ran
-check "server mode ran claude remote-control" yes "$(engine exec "$name" tmux capture-pane -p -t main | grep -F "must be logged in to use Remote Control" >/dev/null && echo yes || echo no)"
-name="$prefix-badmode"; created="$created $name"; mkdir "$work/badmode"
-engine run -d --name "$name" --user "$PUID:$PGID" -v "$work/badmode:/data" -e REMOTE_CONTROL_MODE=bogus "$IMAGE" >/dev/null || true
+wait_until "$name" sh -c "tmux capture-pane -p -t =main: | grep -q 'must be logged in to use Remote Control'"
+check "server mode ran claude remote-control" yes "$(engine exec "$name" tmux capture-pane -p -t =main: | has "must be logged in to use Remote Control")"
+raw badmode -e REMOTE_CONTROL_MODE=bogus
 check "unknown REMOTE_CONTROL_MODE stops the container" 1 "$(wait_exit "$name")"
-name="$prefix-server-apikey"; created="$created $name"; mkdir "$work/server-apikey"
-engine run -d --name "$name" --user "$PUID:$PGID" -v "$work/server-apikey:/data" -e REMOTE_CONTROL_MODE=server -e ANTHROPIC_API_KEY=e2e-dummy-key "$IMAGE" >/dev/null || true
+raw badcontinue -e CONTINUE=bogus
+check "unknown CONTINUE stops the container" 1 "$(wait_exit "$name")"
+raw server-apikey -e REMOTE_CONTROL_MODE=server -e ANTHROPIC_API_KEY=e2e-dummy-key
 check "server mode with an API key stops the container" 1 "$(wait_exit "$name")"
-name="$prefix-readonly"; created="$created $name"; mkdir "$work/readonly"
-engine run -d --name "$name" --user "$PUID:$PGID" -v "$work/readonly:/data:ro" "$IMAGE" >/dev/null || true
+raw readonly --ro
 check "unwritable DATA_DIR stops the container" 1 "$(wait_exit "$name")"
 
 echo "== shells tested:${tested:- none}"

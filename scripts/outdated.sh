@@ -37,10 +37,11 @@ done
 
 echo
 node_index=$(curl -fsSL --proto '=https' --proto-redir '=https' https://nodejs.org/dist/index.json)
-major=$(cur NODE_IMAGE | sed -n 's/^node:\([0-9]*\)\..*/\1/p')
+major=$(cur NODE_IMAGE | sed -n 's/.*\/node:\([0-9]*\)\..*/\1/p')
 patch=$(echo "$node_index" | jq -r --arg m "v$major." '[.[] | select(.version | startswith($m))][0].version // empty' | tr -d v)
 lts=$(echo "$node_index" | jq -r '[.[] | select(.lts != false)][0].version // empty' | tr -d v)
-row "node $major.x" "$(cur NODE_IMAGE | sed -n 's/^node:\([0-9.]*\)-.*/\1/p')" "$patch"
-[ -n "$lts" ] && [ "${lts%%.*}" != "$major" ] && \
+row "node $major.x" "$(cur NODE_IMAGE | sed -n 's/.*\/node:\([0-9.]*\)-.*/\1/p')" "$patch"
+if [ -n "$lts" ] && [ "${lts%%.*}" != "$major" ]; then
   echo "Node $major.x is not the newest LTS line; $lts is (base-image switch, not a patch bump)"
+fi
 CHECK

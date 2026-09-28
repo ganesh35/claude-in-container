@@ -1,4 +1,3 @@
-# syntax=docker/dockerfile:1
 # Base: Node 24 LTS, pinned by digest for reproducible builds. Registry images are fully qualified: Podman on
 # Fedora-family hosts enforces short-name resolution and refuses bare Docker Hub names without a TTY
 ARG NODE_IMAGE=docker.io/library/node:24.21.0-bookworm-slim@sha256:0e0ff40c39bc087845bfb27465a0df4ea419520094bc35842ff83dd8cbe6f9b6
@@ -48,9 +47,11 @@ USER 1000:1000
 WORKDIR /data
 COPY --chmod=755 start.sh install-tools.sh /usr/local/bin/
 COPY --chmod=444 keys/aws-cli.asc /usr/local/share/claude-in-container/aws-cli.asc
-# Unhealthy when Claude exited and only the fallback shell remains; the long start period covers first-start tool installs
+# Unhealthy when Claude exited and only the fallback shell remains; the long start period covers first-start tool installs.
+# Absolute paths: /data/.home/.local/bin is first on PATH and user-writable
 HEALTHCHECK --interval=30s --timeout=5s --start-period=10m --retries=3 \
-  CMD ["sh", "-c", "tmux has-session -t main 2>/dev/null && pgrep -x claude >/dev/null"]
-# tini reaps zombies and forwards signals so the container stops cleanly
-ENTRYPOINT ["/usr/bin/tini", "--"]
+  CMD ["/bin/sh", "-c", "/usr/bin/tmux has-session -t =main 2>/dev/null && /usr/bin/pgrep -x claude >/dev/null"]
+# tini reaps zombies and forwards signals to the whole group (-g), so a stop during a tool install reaches the installer
+# and it releases its lock; tmux runs in its own session and is stopped by start.sh's trap instead
+ENTRYPOINT ["/usr/bin/tini", "-g", "--"]
 CMD ["/usr/local/bin/start.sh"]
