@@ -11,7 +11,7 @@ work=$(mktemp -d "${TMPDIR:-/tmp}/cic-test.XXXXXX")
 repo="$work/repo"
 mkdir "$repo" && cp -R "$ROOT/Dockerfile" "$ROOT/start.sh" "$ROOT/install-tools.sh" "$ROOT/routine.sh" "$ROOT/.env.example" "$ROOT/compose.yaml" \
   "$ROOT/scripts" "$ROOT/keys" "$ROOT/unraid" "$repo/"
-for v in $CONTAINER_ENV CLAUDE_CODE_VERSION CONTAINER_NAME DATA_DIR GHCR_TOKEN PUBLISH_IMAGE PLATFORMS; do unset "$v"; done
+for v in $CONTAINER_ENV CLAUDE_CODE_VERSION CONTAINER_NAME DATA_DIR GHCR_TOKEN GITHUB_TOKEN PUBLISH_IMAGE PLATFORMS RELEASE_REPO; do unset "$v"; done
 CONTAINER_ENGINE=$ENGINE IMAGE="claude-in-container:test-$$" PUID=$(id -u) PGID=$(id -g)
 export CONTAINER_ENGINE IMAGE PUID PGID
 prefix="cic-test-$$" created="" failed=0
@@ -71,6 +71,7 @@ wait_until() { # container test-command...: polls up to 30 s
 
 echo "== lint"
 check "publish.sh refuses to run without a token" 1 "$(rc sh "$repo/scripts/publish.sh")"
+check "release.sh refuses to run without a token" 2 "$(rc sh "$repo/scripts/release.sh" changed)"
 if out=$(sh "$repo/scripts/lint.sh" 2>&1); then echo "  PASS lint.sh"; else echo "  FAIL lint.sh"; echo "$out" | tail -20; exit 1; fi
 echo "== build"
 if out=$(sh "$repo/scripts/build.sh" 2>&1); then echo "  PASS build.sh"; else echo "  FAIL build.sh"; echo "$out" | tail -20; exit 1; fi

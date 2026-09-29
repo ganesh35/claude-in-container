@@ -184,8 +184,13 @@ Image-level versions (`NODE_IMAGE`, `UV_IMAGE` — both digest-pinned — `PLAYW
 | `scripts/ci.sh` | `lint.sh` then `test.sh` — the CI entrypoint; run it before opening a PR |
 | `scripts/outdated.sh` | Report newer versions of pinned tools, Claude Code, Playwright and the Node base image; read-only |
 | `scripts/publish.sh` | Build and push to GHCR, tagged with the Claude Code version and `latest`; needs `GHCR_TOKEN` (CI only) |
+| `scripts/release.sh changed\|create` | Whether image files changed since the latest GitHub release; create the next release (`v<version>` or `v<version>-N`) with generated notes. Needs `GITHUB_TOKEN`, curl, jq (CI only) |
 
 Compose users update with `CLAUDE_CODE_VERSION=<version>` in `.env`, then `docker compose up -d --build`.
+
+## Maintenance
+
+The [`maintenance/`](maintenance/) playbooks let an unattended claude-in-container instance keep this repository current through [routines](#routines): a version check that opens and, once CI is green, merges Claude Code bump pull requests, and an issue triage that opens fix pull requests for a human to review. CI publishes and releases whatever reaches `main`.
 
 ## Testing
 
