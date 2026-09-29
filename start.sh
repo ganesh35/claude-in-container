@@ -52,6 +52,16 @@ else
   claude='claude --remote-control "$RC_NAME"'
 fi
 
+# Routines: /data/routines is a crontab run by supercronic (reloaded when edited); an invalid file is logged and skipped
+if [ -f /data/routines ]; then
+  if /usr/local/bin/supercronic -test /data/routines >/dev/null 2>&1; then
+    /usr/local/bin/supercronic -inotify /data/routines &
+    echo "routines: scheduled from /data/routines"
+  else
+    echo "routines: /data/routines is invalid, routines disabled (check it with: supercronic -test /data/routines)" >&2
+  fi
+fi
+
 # Resume the last conversation (falling back to a fresh one) or start fresh; drop to a shell when Claude exits
 if [ "$resume" = true ]; then cmd="$claude --continue || $claude"; else cmd=$claude; fi
 tmux new-session -d -s main -c /data -e "RC_NAME=$name" "$cmd; exec bash"

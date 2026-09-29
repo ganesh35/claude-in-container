@@ -23,6 +23,7 @@ row() { # name current latest
 
 printf '%-14s %-20s %-20s %s\n' NAME CURRENT LATEST STATUS
 row claude-code "$(cur CLAUDE_CODE_VERSION)" "$(npm_latest @anthropic-ai/claude-code || true)"
+row supercronic "$(cur SUPERCRONIC_VERSION)" "$(gh_latest aptible/supercronic v || true)"
 row uv "$(cur UV_IMAGE | sed -n 's/^.*:\([0-9][0-9.]*\)@.*/\1/p')" "$(gh_latest astral-sh/uv v || true)"
 row playwright "$(cur PLAYWRIGHT_VERSION)" "$(npm_latest playwright || true)"
 row gh "$(cur GH_VERSION)" "$(gh_latest cli/cli v || true)"

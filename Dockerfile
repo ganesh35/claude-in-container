@@ -24,6 +24,19 @@ RUN apt-get update && apt-get install -y --no-install-recommends ca-certificates
 
 COPY --from=uv /uv /uvx /usr/local/bin/
 
+# Scheduler for routines (/data/routines, crontab syntax). Pinned; SHA256 per arch from the GitHub release asset digests,
+# so a version bump means updating both sums
+ARG SUPERCRONIC_VERSION=0.2.49
+ARG TARGETARCH
+RUN case "$TARGETARCH" in \
+      amd64) sum=a53ae236602c7338aba3fbaff40bda6300eae3b9fedb8261eb06cfe3724430c1 ;; \
+      arm64) sum=02aa0cb229ba09050cba6638059dadb9eedc2276632ea43d6a57a2f8c1629dd5 ;; \
+      *) echo "unsupported architecture: $TARGETARCH" >&2; exit 1 ;; \
+    esac \
+    && curl -fsSL --proto '=https' --proto-redir '=https' -o /usr/local/bin/supercronic \
+      "https://github.com/aptible/supercronic/releases/download/v${SUPERCRONIC_VERSION}/supercronic-linux-${TARGETARCH}" \
+    && echo "$sum  /usr/local/bin/supercronic" | sha256sum -c - && chmod 755 /usr/local/bin/supercronic
+
 # gh, terraform, AWS CLI, yq, jq, pnpm and Bruno install at runtime via install-tools.sh (versions from .env)
 # Playwright browsers are installed per project; the image only carries their system libraries
 RUN npm install -g "@anthropic-ai/claude-code@${CLAUDE_CODE_VERSION}" \
@@ -46,6 +59,7 @@ RUN mkdir -p /usr/local/share/claude-in-container && chmod 755 /usr/local/share/
 USER 1000:1000
 WORKDIR /data
 COPY --chmod=755 start.sh install-tools.sh /usr/local/bin/
+COPY --chmod=755 routine.sh /usr/local/bin/routine
 COPY --chmod=444 keys/aws-cli.asc /usr/local/share/claude-in-container/aws-cli.asc
 # Unhealthy when Claude exited and only the fallback shell remains; the long start period covers first-start tool installs.
 # Absolute paths: /data/.home/.local/bin is first on PATH and user-writable. After the first-run login Claude re-launches
