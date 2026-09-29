@@ -52,13 +52,14 @@ else
   claude='claude --remote-control "$RC_NAME"'
 fi
 
-# Routines: /data/routines is a crontab run by supercronic (reloaded when edited); an invalid file is logged and skipped
-if [ -f /data/routines ]; then
-  if /usr/local/bin/supercronic -test /data/routines >/dev/null 2>&1; then
-    /usr/local/bin/supercronic -inotify /data/routines &
-    echo "routines: scheduled from /data/routines"
+# Routines: ROUTINES names a crontab run by supercronic (reloaded when edited); empty = off.
+# A missing or invalid file is logged and skipped, so Claude still starts
+if [ -n "${ROUTINES:-}" ]; then
+  if [ -f "$ROUTINES" ] && /usr/local/bin/supercronic -test "$ROUTINES" >/dev/null 2>&1; then
+    /usr/local/bin/supercronic -inotify "$ROUTINES" &
+    echo "routines: scheduled from $ROUTINES"
   else
-    echo "routines: /data/routines is invalid, routines disabled (check it with: supercronic -test /data/routines)" >&2
+    echo "routines: $ROUTINES is missing or invalid, routines disabled (check it with: supercronic -test $ROUTINES)" >&2
   fi
 fi
 

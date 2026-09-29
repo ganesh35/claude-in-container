@@ -188,11 +188,15 @@ raw readonly --ro
 check "unwritable DATA_DIR stops the container" 1 "$(wait_exit "$name")"
 
 echo "== routines"
-check "no routines file, no scheduler" 1 "$(rc engine exec "$prefix-server" pgrep -x supercronic)"
+check "routines off by default" 1 "$(rc engine exec "$prefix-server" pgrep -x supercronic)"
+mkdir -p "$work/routines-off"; echo '* * * * * true' > "$work/routines-off/routines"
+raw routines-off
+wait_until "$name" pgrep -x claude
+check "a routines file alone does nothing (ROUTINES unset)" 1 "$(rc engine exec "$name" pgrep -x supercronic)"
 mkdir -p "$work/routines"
 # 7-field expressions (seconds first) fire every 5 s, so the suite needn't wait for a minute boundary
 printf '%s\n' '*/5 * * * * * * echo e2e-routine-ran > /data/routine-proof' '*/5 * * * * * * routine say e2e hello' > "$work/routines/routines"
-raw routines
+raw routines -e ROUTINES=/data/routines
 wait_until "$name" test -f /data/routine-proof
 check "routine schedule fires" 0 "$(rc engine exec "$name" test -f /data/routine-proof)"
 wait_until "$name" sh -c "ls /data/routines-output/*say-e2e-hello.md"
@@ -202,7 +206,7 @@ i=0; until [ "$(logged "$name" "routine: ")" = yes ] || [ $i -ge 15 ]; do i=$((i
 check "routine run is logged" yes "$(logged "$name" "routine: ")"
 check "claude still runs alongside routines" 0 "$(rc engine exec "$name" pgrep -x claude)"
 mkdir -p "$work/badroutines"; echo "not a cron line" > "$work/badroutines/routines"
-raw badroutines
+raw badroutines -e ROUTINES=/data/routines
 wait_until "$name" pgrep -x claude
 check "invalid routines file is logged" yes "$(logged "$name" "routines disabled")"
 check "claude starts despite an invalid routines file" 0 "$(rc engine exec "$name" pgrep -x claude)"

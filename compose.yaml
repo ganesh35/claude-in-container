@@ -15,7 +15,7 @@ services:
     security_opt: [no-new-privileges:true]
     # Same names as CONTAINER_ENV in scripts/lib.sh; unset ones are not passed
     environment:
-      [REMOTE_CONTROL_NAME, REMOTE_CONTROL_MODE, ANTHROPIC_API_KEY, CONTINUE, GH_VERSION, YQ_VERSION, JQ_VERSION,
+      [REMOTE_CONTROL_NAME, REMOTE_CONTROL_MODE, ANTHROPIC_API_KEY, CONTINUE, ROUTINES, GH_VERSION, YQ_VERSION, JQ_VERSION,
        TERRAFORM_VERSION, AWSCLI_VERSION, NPM_TOOLS, UV_TOOLS]
     volumes:
       # The single mount; fail fast if missing, since Docker would create it root-owned and unwritable for Claude
