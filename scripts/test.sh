@@ -10,7 +10,8 @@ ROOT=$(cd "$(dirname "$0")/.." && pwd)
 work=$(mktemp -d "${TMPDIR:-/tmp}/cic-test.XXXXXX")
 repo="$work/repo"
 mkdir "$repo" && cp -R "$ROOT/Dockerfile" "$ROOT/start.sh" "$ROOT/install-tools.sh" "$ROOT/routine.sh" "$ROOT/.env.example" "$ROOT/compose.yaml" \
-  "$ROOT/scripts" "$ROOT/keys" "$ROOT/unraid" "$repo/"
+  "$ROOT/scripts" "$ROOT/keys" "$ROOT/unraid" "$ROOT/maintenance" "$ROOT/README.md" "$ROOT/LICENSE" "$ROOT/ca_profile.xml" \
+  "$ROOT/.editorconfig" "$ROOT/.shellcheckrc" "$ROOT/.yamllint" "$ROOT/.gitignore" "$repo/"
 for v in $CONTAINER_ENV CLAUDE_CODE_VERSION CONTAINER_NAME DATA_DIR GHCR_TOKEN GITHUB_TOKEN PUBLISH_IMAGE PLATFORMS RELEASE_REPO; do unset "$v"; done
 CONTAINER_ENGINE=$ENGINE IMAGE="claude-in-container:test-$$" PUID=$(id -u) PGID=$(id -g)
 export CONTAINER_ENGINE IMAGE PUID PGID
@@ -29,7 +30,10 @@ trap cleanup EXIT
 trap 'exit 1' INT TERM
 
 check() { # description expected actual
-  if [ "$2" = "$3" ]; then echo "  PASS $1"; else echo "  FAIL $1 (expected '$2', got '$3')"; failed=$((failed + 1)); fi
+  if [ "$2" = "$3" ]; then echo "  PASS $1"; else
+    echo "  FAIL $1 (expected '$2', got '$3')"
+    failed=$((failed + 1))
+  fi
 }
 rc() { "$@" >/dev/null 2>&1 && echo 0 || echo $?; }
 # grep reads all input (no -q): an early exit would SIGPIPE the producer and fail under pipefail
@@ -46,42 +50,88 @@ use() { # container data-dir: points run.sh at it
   created="$created $1"
 }
 raw() { # label [--ro] [engine run args...]: a container started directly, with its own data dir under $work/label
-  name="$prefix-$1"; created="$created $name"; mkdir -p "$work/$1"; mount="$work/$1:/data"; shift
-  if [ "${1:-}" = --ro ]; then mount="$mount:ro"; shift; fi
+  name="$prefix-$1"
+  created="$created $name"
+  mkdir -p "$work/$1"
+  mount="$work/$1:/data"
+  shift
+  if [ "${1:-}" = --ro ]; then
+    mount="$mount:ro"
+    shift
+  fi
   engine run -d --name "$name" --user "$PUID:$PGID" -v "$mount" "$@" "$IMAGE" >/dev/null || true
 }
 wait_healthy() { # stops early once the container is gone or has exited
   i=0
-  while [ $i -lt 40 ]; do
+  while [ "$i" -lt 40 ]; do
     s=$(engine inspect -f '{{.State.Running}} {{.State.Health.Status}}' "$1" 2>/dev/null || echo "false missing")
-    case $s in "true healthy") s=healthy; break ;; "false "*) s="exited (${s#false })"; break ;; esac
-    i=$((i + 1)); sleep 5
+    case $s in
+      "true healthy")
+        s=healthy
+        break
+        ;;
+      "false "*)
+        s="exited (${s#false })"
+        break
+        ;;
+      *) ;; # still starting
+    esac
+    i=$((i + 1))
+    sleep 5
   done
   echo "${s#true }"
 }
 wait_exit() { # echoes the exit code once the container stops
   i=0
-  while [ "$(engine inspect -f '{{.State.Running}}' "$1")" = true ] && [ $i -lt 30 ]; do i=$((i + 1)); sleep 2; done
+  while [ "$(engine inspect -f '{{.State.Running}}' "$1")" = true ] && [ "$i" -lt 30 ]; do
+    i=$((i + 1))
+    sleep 2
+  done
   engine inspect -f '{{.State.ExitCode}}' "$1"
 }
 wait_until() { # container test-command...: polls up to 30 s
-  c=$1; shift; i=0
-  until engine exec "$c" "$@" >/dev/null 2>&1 || [ $i -ge 15 ]; do i=$((i + 1)); sleep 2; done
+  c=$1
+  shift
+  i=0
+  until engine exec "$c" "$@" >/dev/null 2>&1 || [ "$i" -ge 15 ]; do
+    i=$((i + 1))
+    sleep 2
+  done
 }
 
 echo "== lint"
 check "publish.sh refuses to run without a token" 1 "$(rc sh "$repo/scripts/publish.sh")"
 check "release.sh refuses to run without a token" 2 "$(rc sh "$repo/scripts/release.sh" changed)"
-if out=$(sh "$repo/scripts/lint.sh" 2>&1); then echo "  PASS lint.sh"; else echo "  FAIL lint.sh"; echo "$out" | tail -20; exit 1; fi
+if out=$(sh "$repo/scripts/lint.sh" 2>&1); then echo "  PASS lint.sh"; else
+  echo "  FAIL lint.sh"
+  echo "$out" | tail -20
+  exit 1
+fi
 echo "== build"
-if out=$(sh "$repo/scripts/build.sh" 2>&1); then echo "  PASS build.sh"; else echo "  FAIL build.sh"; echo "$out" | tail -20; exit 1; fi
+if out=$(sh "$repo/scripts/build.sh" 2>&1); then echo "  PASS build.sh"; else
+  echo "  FAIL build.sh"
+  echo "$out" | tail -20
+  exit 1
+fi
+echo "== security"
+if out=$(sh "$repo/scripts/security.sh" "$IMAGE" 2>&1); then echo "  PASS image has no fixable CRITICAL vulnerabilities"; else
+  echo "  FAIL image vulnerability scan"
+  echo "$out" | tail -40
+  exit 1
+fi
 
 tested=""
 for shell in ${TEST_SHELLS:-dash ash bash zsh}; do
-  command -v "$shell" >/dev/null || { echo "== $shell: SKIP (not installed)"; continue; }
-  echo "== $shell"; tested="$tested $shell"
-  name="$prefix-$shell"; use "$name" "$work/$shell"
-  REMOTE_CONTROL_NAME="e2e $shell it's"; export REMOTE_CONTROL_NAME
+  command -v "$shell" >/dev/null || {
+    echo "== $shell: SKIP (not installed)"
+    continue
+  }
+  echo "== $shell"
+  tested="$tested $shell"
+  name="$prefix-$shell"
+  use "$name" "$work/$shell"
+  REMOTE_CONTROL_NAME="e2e $shell it's"
+  export REMOTE_CONTROL_NAME
   check run.sh 0 "$(rc "$shell" "$repo/scripts/run.sh")"
   check "run.sh refuses an existing container" 1 "$(rc "$shell" "$repo/scripts/run.sh")"
   check "run.sh --replace" 0 "$(rc "$shell" "$repo/scripts/run.sh" --replace)"
@@ -92,7 +142,7 @@ for shell in ${TEST_SHELLS:-dash ash bash zsh}; do
   # shellcheck disable=SC2012 # single known filename
   check "data files owned by PUID" "$PUID" "$(ls -ln "$DATA_DIR/e2e-file" | awk '{print $3}')"
   current=$(engine exec "$name" claude --version | cut -d' ' -f1)
-  echo "CLAUDE_CODE_VERSION=$current" > "$repo/.env"
+  echo "CLAUDE_CODE_VERSION=$current" >"$repo/.env"
   check "update.sh is a no-op when current" "Already on" "$("$shell" "$repo/scripts/update.sh" "$current" 2>&1 | tail -1 | cut -c1-10)"
   rm "$repo/.env"
 done
@@ -100,7 +150,8 @@ unset REMOTE_CONTROL_NAME
 
 echo "== instances sharing one DATA_DIR"
 shared="$work/shared" main="$prefix-main" second="$prefix-second"
-use "$main" "$shared"; created="$created $second"
+use "$main" "$shared"
+created="$created $second"
 JQ_VERSION=$JQ sh "$repo/scripts/run.sh" >/dev/null || true
 check "main: healthy" healthy "$(wait_healthy "$main")"
 check "main: jq installed when missing" yes "$(logged "$main" "jq $JQ installed")"
@@ -125,7 +176,7 @@ check "npm git spec is rejected" yes "$(engine exec -e NPM_TOOLS=e2e-bad@git+htt
 check "npm range spec is rejected" yes "$(engine exec -e NPM_TOOLS=pnpm@12 "$main" install-tools.sh 2>&1 | has "pnpm@12 FAILED: pin an exact version")"
 check "uv range spec is rejected" yes "$(engine exec -e "UV_TOOLS=ruff==0.9.*" "$main" install-tools.sh 2>&1 | has "FAILED: pin an exact version")"
 # Test-only curl that corrupts downloads matching FAKE_CORRUPT; mounted where the installer's fixed PATH finds it first
-cat > "$work/fakecurl" <<'FAKE'
+cat >"$work/fakecurl" <<'FAKE'
 #!/bin/sh
 /usr/bin/curl "$@"; rc=$?; out=""
 while [ $# -gt 0 ]; do [ "$1" = -o ] && out=$2; shift; done
@@ -143,13 +194,19 @@ corrupt bad-signature "AWSCLI_VERSION=$AWS" aws.zip
 # A stop during a first-start install must release the lock, or the next start waits behind it
 raw stop-install -e "AWSCLI_VERSION=$AWS"
 lock="$work/stop-install/.home/.local/.install-tools.lock"
-i=0; until [ -d "$lock" ] || [ $i -ge 30 ]; do i=$((i + 1)); sleep 1; done
+i=0
+until [ -d "$lock" ] || [ "$i" -ge 30 ]; do
+  i=$((i + 1))
+  sleep 1
+done
 engine stop -t 10 "$name" >/dev/null || true
 check "stop during install releases the lock" no "$(test -d "$lock" && echo yes || echo no)"
 
 echo "== behaviour"
-name="$prefix-behaviour"; use "$name" "$work/behaviour"
-REMOTE_CONTROL_NAME=e2e; export REMOTE_CONTROL_NAME
+name="$prefix-behaviour"
+use "$name" "$work/behaviour"
+REMOTE_CONTROL_NAME=e2e
+export REMOTE_CONTROL_NAME
 sh "$repo/scripts/run.sh" >/dev/null || true
 wait_healthy "$name" >/dev/null
 # Engine-agnostic (docker and podman report CapDrop differently): read the kernel's view from inside
@@ -166,7 +223,11 @@ wait_until "$name" sh -c "! pgrep -x claude"
 check "healthcheck fails once claude exits" 1 "$(rc engine exec "$name" sh -c "$hc")"
 check "tmux session survives in the fallback shell" 0 "$(rc engine exec "$name" tmux has-session -t =main)"
 engine exec "$name" tmux kill-session -t =main || true
-i=0; while [ "$(engine inspect -f '{{.State.Running}}' "$name")" = true ] && [ $i -lt 10 ]; do i=$((i + 1)); sleep 2; done
+i=0
+while [ "$(engine inspect -f '{{.State.Running}}' "$name")" = true ] && [ "$i" -lt 10 ]; do
+  i=$((i + 1))
+  sleep 2
+done
 check "start.sh ends with the tmux session" yes "$(logged "$name" "session 'main' ended")"
 
 raw apikey -e ANTHROPIC_API_KEY=e2e-dummy-key
@@ -190,27 +251,36 @@ check "unwritable DATA_DIR stops the container" 1 "$(wait_exit "$name")"
 
 echo "== routines"
 check "routines off by default" 1 "$(rc engine exec "$prefix-server" pgrep -x supercronic)"
-mkdir -p "$work/routines-off"; echo '* * * * * true' > "$work/routines-off/routines"
+mkdir -p "$work/routines-off"
+echo '* * * * * true' >"$work/routines-off/routines"
 raw routines-off
 wait_until "$name" pgrep -x claude
 check "a routines file alone does nothing (ROUTINES unset)" 1 "$(rc engine exec "$name" pgrep -x supercronic)"
 mkdir -p "$work/routines"
 # 7-field expressions (seconds first) fire every 5 s, so the suite needn't wait for a minute boundary
-printf '%s\n' '*/5 * * * * * * echo e2e-routine-ran > /data/routine-proof' '*/5 * * * * * * routine say e2e hello' > "$work/routines/routines"
+printf '%s\n' '*/5 * * * * * * echo e2e-routine-ran > /data/routine-proof' '*/5 * * * * * * routine say e2e hello' >"$work/routines/routines"
 raw routines -e ROUTINES=/data/routines
 wait_until "$name" test -f /data/routine-proof
 check "routine schedule fires" 0 "$(rc engine exec "$name" test -f /data/routine-proof)"
 wait_until "$name" sh -c "ls /data/routines-output/*say-e2e-hello.md"
 check "routine helper saves the run" 0 "$(rc engine exec "$name" sh -c "ls /data/routines-output/*say-e2e-hello.md")"
 # The summary line comes when claude -p finishes, a moment after the output file appears
-i=0; until [ "$(logged "$name" "routine: ")" = yes ] || [ $i -ge 15 ]; do i=$((i + 1)); sleep 2; done
+i=0
+until [ "$(logged "$name" "routine: ")" = yes ] || [ "$i" -ge 15 ]; do
+  i=$((i + 1))
+  sleep 2
+done
 check "routine run is logged" yes "$(logged "$name" "routine: ")"
 check "claude still runs alongside routines" 0 "$(rc engine exec "$name" pgrep -x claude)"
-mkdir -p "$work/badroutines"; echo "not a cron line" > "$work/badroutines/routines"
+mkdir -p "$work/badroutines"
+echo "not a cron line" >"$work/badroutines/routines"
 raw badroutines -e ROUTINES=/data/routines
 wait_until "$name" pgrep -x claude
 check "invalid routines file is logged" yes "$(logged "$name" "routines disabled")"
 check "claude starts despite an invalid routines file" 0 "$(rc engine exec "$name" pgrep -x claude)"
 
 echo "== shells tested:${tested:- none}"
-if [ "$failed" -eq 0 ]; then echo "All tests passed"; else echo "$failed test(s) failed"; exit 1; fi
+if [ "$failed" -eq 0 ]; then echo "All tests passed"; else
+  echo "$failed test(s) failed"
+  exit 1
+fi

@@ -10,7 +10,10 @@ mkdir -p "$prefix/bin" "$state"
 case $(uname -m) in
   x86_64) arch=amd64 awsarch=x86_64 ;;
   aarch64 | arm64) arch=arm64 awsarch=aarch64 ;;
-  *) echo "tools: unsupported architecture $(uname -m)" >&2; exit 1 ;;
+  *)
+    echo "tools: unsupported architecture $(uname -m)" >&2
+    exit 1
+    ;;
 esac
 
 log() { echo "tools: $*"; }
@@ -65,25 +68,43 @@ install_npm() { npm install -g "$1"; } # NPM_CONFIG_PREFIX in the image points a
 install_uv() { uv tool install --force "$1"; }
 
 run() { # key wanted-version binary-or-empty installer [args...]
-  key=$1 want=$2 bin=$3; shift 3
+  key=$1 want=$2 bin=$3
+  shift 3
   [ -n "$want" ] || return 0
   if [ "$(cat "$state/$key" 2>/dev/null)" = "$want" ] && { [ -z "$bin" ] || [ -x "$prefix/bin/$bin" ]; }; then
-    log "$key $want up to date"; return 0
+    log "$key $want up to date"
+    return 0
   fi
   d=$(mktemp -d) rc=0
-  (cd "$d" && "$@" "$want") > "$d/.log" 2>&1 || rc=$?
+  (cd "$d" && "$@" "$want") >"$d/.log" 2>&1 || rc=$?
   case $rc in
-    0) printf '%s\n' "$want" > "$state/$key"; log "$key $want installed" ;;
-    2) log "$key $want VERIFICATION FAILED (checksum or signature), stopping"; rm -rf "$d"; exit 2 ;;
-    *) log "$key $want FAILED, continuing without it"; tail -n 3 "$d/.log" | sed 's/^/tools:   /' ;;
+    0)
+      printf '%s\n' "$want" >"$state/$key"
+      log "$key $want installed"
+      ;;
+    2)
+      log "$key $want VERIFICATION FAILED (checksum or signature), stopping"
+      rm -rf "$d"
+      exit 2
+      ;;
+    *)
+      log "$key $want FAILED, continuing without it"
+      tail -n 3 "$d/.log" | sed 's/^/tools:   /'
+      ;;
   esac
   rm -rf "$d"
 }
 
 # One installer at a time across instances sharing the folder; a crashed holder's lock goes stale after 30 min
 until mkdir "$lock" 2>/dev/null; do
-  if [ -n "$(find "$lock" -maxdepth 0 -mmin +30 2>/dev/null)" ]; then rmdir "$lock" 2>/dev/null || true; continue; fi
-  [ -n "${waiting:-}" ] || { log "waiting for another instance to finish installing"; waiting=1; }
+  if [ -n "$(find "$lock" -maxdepth 0 -mmin +30 2>/dev/null)" ]; then
+    rmdir "$lock" 2>/dev/null || true
+    continue
+  fi
+  [ -n "${waiting:-}" ] || {
+    log "waiting for another instance to finish installing"
+    waiting=1
+  }
   sleep 2
 done
 trap 'rmdir "$lock" 2>/dev/null || true' EXIT
@@ -99,8 +120,8 @@ set -f # lists are split on spaces, never globbed
 # Exact versions only: ranges, tags and git/file/URL specs would resolve to a moving target while the state file says
 # "up to date". npm needs all three parts (it reads 'pnpm@12' as a range); pip's == is exact for any digits-and-dots version.
 # Scoped npm names start with @, so the version is what follows the last @.
-exact() { case $1 in ''|*[!0-9.]*) return 1 ;; esac; }
-exact_npm() { case $1 in [0-9]*.[0-9]*.[0-9]*) exact "$1" ;; *) return 1 ;; esac; }
+exact() { case $1 in '' | *[!0-9.]*) return 1 ;; *) return 0 ;; esac }
+exact_npm() { case $1 in [0-9]*.[0-9]*.[0-9]*) exact "$1" ;; *) return 1 ;; esac }
 for spec in ${NPM_TOOLS:-}; do
   if [ "${spec%@*}" != "$spec" ] && exact_npm "${spec##*@}"; then
     run "npm-$(printf '%s' "${spec%@*}" | tr '/@' '__')" "$spec" "" install_npm

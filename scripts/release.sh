@@ -5,13 +5,19 @@
 set -eu
 ROOT=$(cd "$(dirname "$0")/.." && pwd)
 repo=${RELEASE_REPO:-ganesh35/claude-in-container}
-[ -n "${GITHUB_TOKEN:-}" ] || { echo "GITHUB_TOKEN is not set" >&2; exit 2; }
+[ -n "${GITHUB_TOKEN:-}" ] || {
+  echo "GITHUB_TOKEN is not set" >&2
+  exit 2
+}
 api() { # method path [curl args...]; the token goes in a header file, never on the command line
-  m=$1 p=$2; shift 2
-  hdr=$(mktemp); trap 'rm -f "$hdr"' EXIT
-  printf 'Authorization: Bearer %s\n' "$GITHUB_TOKEN" > "$hdr"
+  m=$1 p=$2
+  shift 2
+  hdr=$(mktemp)
+  trap 'rm -f "$hdr"' EXIT
+  printf 'Authorization: Bearer %s\n' "$GITHUB_TOKEN" >"$hdr"
   curl -fsSL --proto '=https' -X "$m" -H @"$hdr" -H 'Accept: application/vnd.github+json' "$@" "https://api.github.com/repos/$repo/$p"
-  rm -f "$hdr"; trap - EXIT
+  rm -f "$hdr"
+  trap - EXIT
 }
 version=$(sed -n 's/^ARG CLAUDE_CODE_VERSION=//p' "$ROOT/Dockerfile")
 head=$(git -C "$ROOT" rev-parse HEAD)
@@ -24,19 +30,25 @@ case ${1:-} in
     git -C "$ROOT" cat-file -e "$since^{commit}" 2>/dev/null || git -C "$ROOT" fetch -q origin "$since"
     # Everything that goes into the image; docs, tests and CI changes don't warrant a release
     if git -C "$ROOT" diff --quiet "$since" "$head" -- Dockerfile start.sh install-tools.sh routine.sh keys; then
-      echo "No image change since $latest"; exit 1
+      echo "No image change since $latest"
+      exit 1
     fi
-    echo "Image changed since $latest" ;;
+    echo "Image changed since $latest"
+    ;;
   create)
     tags=$(api GET "releases?per_page=100" | jq -r '.[].tag_name')
     if ! printf '%s\n' "$tags" | grep -qx "v$version"; then
       tag="v$version"
     else
       n=$(printf '%s\n' "$tags" | sed -n "s/^v$version-\([0-9]*\)$/\1/p" | sort -n | tail -1)
-      tag="v$version-$(( ${n:-0} + 1 ))"
+      tag="v$version-$((${n:-0} + 1))"
     fi
     body=$(jq -n --arg t "$tag" --arg c "$head" \
       '{tag_name: $t, target_commitish: $c, name: ("claude-in-container " + $t), generate_release_notes: true}')
-    api POST releases -d "$body" | jq -r '"Released \(.tag_name): \(.html_url)"' ;;
-  *) echo "usage: $0 changed|create" >&2; exit 2 ;;
+    api POST releases -d "$body" | jq -r '"Released \(.tag_name): \(.html_url)"'
+    ;;
+  *)
+    echo "usage: $0 changed|create" >&2
+    exit 2
+    ;;
 esac

@@ -179,9 +179,11 @@ Image-level versions (`NODE_IMAGE`, `UV_IMAGE` — both digest-pinned — `PLAYW
 | `scripts/run.sh [--replace] [--name <instance>]` | Start the container; `--replace` recreates it, `--name` runs another instance on the same `DATA_DIR` |
 | `scripts/attach.sh [--name <instance>]` | Attach to Claude's tmux session |
 | `scripts/update.sh [version]` | Pin a Claude Code version (default: latest) in `.env`, rebuild, recreate the main instance (recreate others with `run.sh --replace --name …`) |
-| `scripts/lint.sh` | Drift check of variables across `.env.example`, `compose.yaml` and the Unraid template, then shellcheck + hadolint via pinned containers |
+| `scripts/lint.sh` | Drift check of variables across `.env.example`, `compose.yaml` and the Unraid template; shellcheck (`.shellcheckrc`), hadolint, shfmt and editorconfig-checker (`.editorconfig`), yamllint (`.yamllint`) and XML parsing, all via pinned containers |
+| `scripts/security.sh [image]` | gitleaks secret scan of the repo files and Trivy Dockerfile scan; with an image, Trivy fails on fixable CRITICAL vulnerabilities and reports fixable HIGH ones |
+| `scripts/compat.sh` | Breaking-change check: variables, template settings, scripts, `HOME` and the working directory must keep everything the latest release had, unless a commit since says `BREAKING CHANGE` |
 | `scripts/test.sh` | End-to-end tests on a throwaway copy; see [Testing](#testing) |
-| `scripts/ci.sh` | `lint.sh` then `test.sh` — the CI entrypoint; run it before opening a PR |
+| `scripts/ci.sh` | `compat.sh`, `security.sh`, then `test.sh` — the CI entrypoint (needs git); run it before opening a PR. `main` only accepts pull requests it passed on |
 | `scripts/outdated.sh` | Report newer versions of pinned tools, Claude Code, Playwright and the Node base image; read-only |
 | `scripts/publish.sh` | Build and push to GHCR, tagged with the Claude Code version and `latest`; needs `GHCR_TOKEN` (CI only) |
 | `scripts/release.sh changed\|create` | Whether image files changed since the latest GitHub release; create the next release (`v<version>` or `v<version>-N`) with generated notes. Needs `GITHUB_TOKEN`, curl, jq (CI only) |
@@ -194,7 +196,7 @@ The [`maintenance/`](maintenance/) playbooks let an unattended claude-in-contain
 
 ## Testing
 
-`scripts/test.sh` lints, builds a throwaway image and runs the scripts end to end under every installed shell in `TEST_SHELLS` (default `dash ash bash zsh`; missing ones are skipped). It also covers instances sharing a folder and tool installs (missing, current, version change, failure, checksum mismatch, bad signature). It works on a temporary copy without your `.env`, and removes only the containers, image and folders it created.
+`scripts/test.sh` lints, builds a throwaway image, scans it and runs the scripts end to end under every installed shell in `TEST_SHELLS` (default `dash ash bash zsh`; missing ones are skipped). It also covers instances sharing a folder and tool installs (missing, current, version change, failure, checksum mismatch, bad signature). It works on a temporary copy without your `.env`, and removes only the containers, image and folders it created.
 
 For all four shells on a Docker host, run it inside an Alpine helper that uses the host's Docker. The shared folder must have the same path on host and helper, because the Docker daemon resolves bind mounts on the host:
 
@@ -213,7 +215,7 @@ docker run --rm --privileged --device /dev/fuse -v "$PWD:/repo:ro" -e CONTAINER_
   dnf install -y -q dash zsh tar busybox && ln -s "$(command -v busybox)" /usr/local/bin/ash
   printf "[containers]\nutsns = \"private\"\nnetns = \"private\"\n" > /tmp/cc.conf; export CONTAINERS_CONF_OVERRIDE=/tmp/cc.conf
   ( while true; do for c in $(podman ps -q); do podman healthcheck run "$c" >/dev/null 2>&1; done; sleep 5; done ) &
-  sh scripts/ci.sh'
+  sh scripts/test.sh'
 ```
 
 ## Behaviour

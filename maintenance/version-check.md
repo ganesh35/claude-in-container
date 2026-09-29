@@ -8,8 +8,8 @@ Goal: keep the Claude Code version baked into the image current. You may merge t
 4. If an open pull request titled `chore(deps): bump Claude Code to <latest>` already exists, continue at step 7 with it.
 5. Check `npm view @anthropic-ai/claude-code@<latest> engines.node` still accepts the Node major in `NODE_IMAGE` in the Dockerfile. If it doesn't, open an issue titled `Claude Code <latest> needs a newer Node` and stop.
 6. On a branch `chore/claude-code-<latest>`, change only that one `ARG` line, commit `chore(deps): bump Claude Code to <latest>`, push, and open a pull request with that title and a one-line body.
-7. Wait for the pull request's checks (`gh pr checks <n> --watch`, up to 30 minutes).
-   - All passed: `gh pr merge <n> --squash --delete-branch`. CI publishes and releases from `main`.
+7. `main` only accepts up-to-date branches: if the pull request is behind, run `gh pr update-branch <n>` first. Wait for the pull request's checks (`gh pr checks <n> --watch`, up to 30 minutes).
+   - All passed: `gh pr merge <n> --squash --delete-branch`. If `main` moved on meanwhile, the merge is refused; update the branch and wait again. CI publishes and releases from `main`.
    - Any failed: do not merge. Comment on the pull request with the failing check's name and the relevant lines of its log, and leave it open.
 8. Report what you did in one short paragraph.
 
