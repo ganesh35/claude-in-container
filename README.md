@@ -119,7 +119,7 @@ For several sessions from one container, set `REMOTE_CONTROL_MODE=server`: `clau
 
 ## Routines
 
-Scheduled headless runs inside the container, with access to everything it can see. Create `/data/routines` (`DATA_DIR/routines` on the host) as a crontab, then restart the container once; later edits are picked up automatically:
+Optional scheduled headless runs inside the container, with access to everything it can see. Off by default: set `ROUTINES` to the path of a crontab inside the container (e.g. `ROUTINES=/data/routines`, i.e. `DATA_DIR/routines` on the host — or a file in a git repo under `/data`, so the schedule is versioned) and restart once; later edits to the file are picked up automatically. Clear `ROUTINES` to switch routines off without deleting the schedule:
 
 ```
 # min hour dom mon dow  command
@@ -128,7 +128,7 @@ Scheduled headless runs inside the container, with access to everything it can s
 ```
 
 - `routine <prompt>` runs `claude -p --permission-mode auto` in `/data` with the container's login and saves the reply to `/data/routines-output/<UTC time>-<first words>.md`; each run logs one line (`routine: ok|failed -> file`) to the container log.
-- The schedule uses [supercronic](https://github.com/aptible/supercronic) syntax (standard cron, plus an optional leading seconds field); an invalid file is logged and skipped, and Claude starts regardless.
+- The schedule uses [supercronic](https://github.com/aptible/supercronic) syntax (standard cron, plus an optional leading seconds field); a missing or invalid file is logged and skipped, and Claude starts regardless. A file without `ROUTINES` pointing at it does nothing.
 - Runs draw on the same Claude usage as interactive sessions, and a run that is still going when the next one is due is skipped.
 - Claude Code's own [routines](https://code.claude.com/docs/en/routines) run in Anthropic's cloud against a GitHub checkout and can't see this container; routing them to your own hardware needs a Team or Enterprise plan ([self-hosted environments](https://code.claude.com/docs/en/self-hosted-environments)). These routines are the in-container equivalent.
 
@@ -161,6 +161,7 @@ Claude can use whatever you configure here, so prefer narrowly scoped credential
 | `REMOTE_CONTROL_NAME` | hostname | Session name in the Claude app |
 | `REMOTE_CONTROL_MODE` | `session` | `server`: start new sessions from the Claude app, named with this prefix — see [Several instances](#several-instances) |
 | `CONTINUE` | `true` | Resume the last conversation on start; `false` on extra instances |
+| `ROUTINES` | empty (off) | Path to a crontab inside the container for scheduled headless runs — see [Routines](#routines) |
 | `CLAUDE_CODE_VERSION` | pinned in `Dockerfile` | Claude Code version baked in at build |
 | `ANTHROPIC_API_KEY` | — | Optional, replaces the subscription login |
 | `GH_VERSION` … `UV_TOOLS` | see `.env.example` | Tools installed on start — see [Tools](#tools) |
