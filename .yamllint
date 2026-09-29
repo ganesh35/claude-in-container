@@ -1,0 +1,6 @@
+# yamllint settings for compose.yaml; scripts/lint.sh applies this file
+extends: default
+rules:
+  document-start: disable
+  line-length: {max: 130}
+  braces: {max-spaces-inside: 1}

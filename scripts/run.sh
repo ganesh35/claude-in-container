@@ -10,8 +10,18 @@ replace=false
 while [ $# -gt 0 ]; do
   case $1 in
     --replace) replace=true ;;
-    --name) [ $# -ge 2 ] || { echo "--name needs a value" >&2; exit 1; }; CONTAINER_NAME=$2; shift ;;
-    *) echo "Unknown option: $1" >&2; exit 1 ;;
+    --name)
+      [ $# -ge 2 ] || {
+        echo "--name needs a value" >&2
+        exit 1
+      }
+      CONTAINER_NAME=$2
+      shift
+      ;;
+    *)
+      echo "Unknown option: $1" >&2
+      exit 1
+      ;;
   esac
   shift
 done
@@ -20,7 +30,10 @@ uid=${PUID:-1000} gid=${PGID:-1000}
 mkdir -p "$data"
 
 if engine container inspect "$CONTAINER_NAME" >/dev/null 2>&1; then
-  [ "$replace" = true ] || { echo "Container '$CONTAINER_NAME' exists; use --replace to recreate it" >&2; exit 1; }
+  [ "$replace" = true ] || {
+    echo "Container '$CONTAINER_NAME' exists; use --replace to recreate it" >&2
+    exit 1
+  }
   engine rm -f "$CONTAINER_NAME" >/dev/null
 fi
 
@@ -29,7 +42,7 @@ envfile=$(mktemp)
 trap 'rm -f "$envfile"' EXIT
 for v in $CONTAINER_ENV; do
   eval "[ -z \"\${$v+x}\" ] || printf '%s=%s\n' $v \"\$$v\""
-done > "$envfile"
+done >"$envfile"
 # Nothing in the image needs Linux capabilities or setuid escalation; drop both
 set -- run -d --name "$CONTAINER_NAME" --hostname "$CONTAINER_NAME" --restart unless-stopped \
   --user "$uid:$gid" --cap-drop ALL --security-opt no-new-privileges \
