@@ -20,7 +20,7 @@ Always-on [Claude Code](https://docs.claude.com/en/docs/claude-code) in a contai
 - **Visible health:** the healthcheck flags when Claude has stopped while the container is still up.
 
 **Consistent and reproducible**
-- **Batteries included:** Node 24, Python/uv, git, psql 18, shellcheck, build-essential and Playwright system deps in the image; gh, AWS CLI, Terraform, jq/yq, pnpm, Bruno and any npm or Python CLI install on first start from versions pinned in `.env`.
+- **Batteries included:** Node 26, Python/uv, git, psql 18, shellcheck, build-essential and Playwright system deps in the image; gh, AWS CLI, Terraform, jq/yq, pnpm, Bruno and any npm or Python CLI install on first start from versions pinned in `.env`.
 - **Same toolchain everywhere:** every tool version is pinned, so Claude works the same on every host.
 - **Controlled updates:** the auto-updater is off; you choose when to move to a new Claude Code version, and roll back by rebuilding the previous one.
 - **Clean host:** no global npm, pip or Terraform installs on your machine.
